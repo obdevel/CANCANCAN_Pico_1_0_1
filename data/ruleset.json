@@ -1,0 +1,4 @@
+[
+	{"source":"[012345]", "class":"EVENT", "pattern":"*:*", "action":"R", "destination":"[012345]", "stop":"Y"},
+	{"source":"[012345]", "class":"OPCODE", "pattern":"[90,91", "action":"R", "destination":"[012345]", "stop":"Y"}
+]
