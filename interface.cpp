@@ -1,3 +1,4 @@
+#include <sys/_types.h>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -626,6 +627,9 @@ void network::run(void) {
 bool network::forward_message(can_msg_wrapper_t *wmsg, [[maybe_unused]] const bool rewrite) {
 
   bool ok = true;
+  unsigned long t = (micros() - wmsg->timestamp);
+
+  VLOG("network/%u: forwarding message, t = %u, rewrite = %u", num, t, rewrite);
 
 #if defined(IS_NETWORK_DEVICE)
   char buffer[GC_BUFFER_SIZE];

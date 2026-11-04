@@ -41,6 +41,7 @@
 
 #include <CBUS.h>
 #include <can2040.h>
+#include <LittleFS.h>
 
 #include "defs.h"
 #include "enums.h"
@@ -74,7 +75,7 @@ bool is_long_event_opcode(const struct can2040_msg *msg);
 
 int lookup_opcode_by_name(const char *opcode_name);
 const char *lookup_opcode_by_value(const byte opcode);
-bool message_has_nn(const byte opcode);
+bool message_has_nn(const struct can2040_msg *msg);
 
 bool mount_local_filesystem(void);
 bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool reload_from_sdcard);
@@ -82,10 +83,8 @@ bool parse_rule_definition(char *line, rule_t *rule);
 bool copy_files_from_sd_card(void);
 
 bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool reload_from_sdcard = false);
-bool parse_text_rule_definition(char *line, rule_t *rule);
-void print_ruleset(void);
-byte process_rules_file_as_text(File &f, ruleset_t *ruleset);
 byte process_rules_file_as_json(File &f, ruleset_t *ruleset);
+void print_rules(ruleset_t *ruleset);
 
 void modify_event_message_with_action(struct can2040_msg *msg, byte which_part, byte action, uint32_t value);
 void modify_non_event_message_with_action(struct can2040_msg *msg, byte action, uint32_t value);
@@ -93,8 +92,10 @@ void modify_non_event_message_with_action(struct can2040_msg *msg, byte action, 
 void convert_interface_list_string_to_interfaces_type(const char *string, interface_list_t *interfaces);
 char *convert_interfaces_type_to_interface_list_string(const interface_list_t *interfaces, char *string);
 
+char *convert_class_list_to_string(const message_class_list_t *classes, char *string);
+
 byte convert_opcode_list_to_array(char *opcode_list, byte *arr);
-bool convert_action(const char *action_text, action_t *action);
+bool convert_action_part(const char *action_text, action_t *action);
 bool convert_message_class_list(const char *message_class_text, message_class_list_t *message_class_list);
 
 void rewrite_can_id(can_msg_wrapper_t *wmsg, const byte canid);

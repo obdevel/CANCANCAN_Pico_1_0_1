@@ -152,16 +152,12 @@
   {}
 #endif
 
-#define RULESET_TEXT_FILENAME "/ruleset.txt"
-#define RULESET_TEXT_FILESPEC "/ruleset%1u.txt"
 #define RULESET_JSON_FILENAME "/ruleset.json"
 #define RULESET_JSON_FILESPEC "/ruleset%1u.json"
 
 #define MAX_RULESET_FILES 8
 #define FILE_COPY_BUFFER_SIZE 256
-#define MAX_JSON_DATA_SIZE 4096U
 
-#define MAX_RULE_LINE_LENGTH 256
 #define TOKENS_PER_RULE 6
 
 #define MAX_RULE_ENTRIES 64

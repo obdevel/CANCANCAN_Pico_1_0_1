@@ -1,3 +1,5 @@
+#include <cstddef>
+#include "can2040.h"
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -282,12 +284,12 @@ const char *lookup_opcode_by_value(const byte opcode) {
 
 /// does this opcode contain a node number
 
-bool message_has_nn(const byte opcode) {
+bool message_has_nn(const struct can2040_msg *msg) {
 
   bool match = false;
 
   for (byte i = 0; i < NUM_OPCODES; i++) {
-    if (opcode_lookup_table[i].opcode == opcode) {
+    if (opcode_lookup_table[i].opcode == msg->data[0]) {
       match = opcode_lookup_table[i].has_nn;
       break;
     }
@@ -363,8 +365,7 @@ void modify_non_event_message_with_action(struct can2040_msg *msg, byte action, 
 
   uint32_t msg_part_value;
 
-  if (message_has_nn(msg->data[0])) {
-
+  if (message_has_nn(msg)) {
     msg_part_value = (msg->data[1] << 8) + msg->data[2];
 
     switch (action) {
@@ -398,15 +399,18 @@ void convert_interface_list_string_to_interfaces_type(const char *string, interf
   /// enclosing brackets are optional
   /// digits may be delimited if desired
 
+  VLOG("convert_interface_list_string_to_interfaces_type: %s", string);
+
   interfaces->num_interfaces = 0;
 
-  for (byte i = 0; string[i] > 0; i++) {
-    if (isdigit(string[i])) {
-      interfaces->interface_list[interfaces->num_interfaces++] = string[i] - 48;
+  for (size_t i = 0; string[i] > 0; i++) {
+    if (isdigit((int)string[i])) {
+      interfaces->interface_list[interfaces->num_interfaces] = string[i] - 48;
       ++interfaces->num_interfaces;
     }
   }
 
+  VLOG("convert_interface_list_string_to_interfaces_type: found %u", interfaces->num_interfaces);
   return;
 }
 
@@ -441,6 +445,8 @@ byte convert_opcode_list_to_array(char *opcode_list, byte *arr) {
   byte index = 0;
   int opcode = 0;
 
+  VLOG("convert_opcode_list_to_array: %s", opcode_list);
+
   char *dupe = strdup(opcode_list);  // take a copy as strtok changes it
 
   ptr = strtok(dupe + 1, ",[]");  // find first comma-delimited token, ignore brackets
@@ -467,6 +473,50 @@ byte convert_opcode_list_to_array(char *opcode_list, byte *arr) {
   free(dupe);
 
   return index;
+}
+
+///
+
+char *convert_class_list_to_string(const message_class_list_t *classes, char *string) {
+
+  char t[8];
+
+  string[0] = 0;
+
+  for (byte i = 0; i < classes->num_classes; i++) {
+    sprintf(t, "%u", classes->class_list[i]);
+    strcat(string, t);
+    strcat(string, ",");
+  }
+
+  return string;
+}
+
+///
+
+void print_rules(ruleset_t *ruleset) {
+
+  char t0[64], t1[64], t2[64], t3[64], t4[64], t5[64];
+  byte r;
+
+  VLOG("--");
+  VLOG("ruleset:");
+
+  for (r = 0; r < MAX_RULE_ENTRIES; r++) {
+    if (!ruleset->rules[r].active) {
+      break;
+    }
+
+    convert_interfaces_type_to_interface_list_string(&ruleset->rules[r].source_interfaces, t0);
+    convert_class_list_to_string(&ruleset->rules[r].message_classes, t1);
+    sprintf(t2, "%u %u:%u %u", ruleset->rules[r].actions[0].action_type, ruleset->rules[r].actions[0].value, ruleset->rules[r].actions[1].action_type, ruleset->rules[r].actions[1].value);
+    convert_interfaces_type_to_interface_list_string(&ruleset->rules[r].destination_interfaces, t3);
+
+    VLOG(" * [%u] S: %s | C: %8s | P: %u:%s:%s | A: %s | %s |", r, t0, t1, ruleset->rules[r].pattern_type, ruleset->rules[r].pattern_parts[0], ruleset->rules[r].pattern_parts[1], t2, t3);
+  }
+
+  VLOG("--");
+  return;
 }
 
 /// rewrite a message header with the can id of the target bus, preserving the upper bits

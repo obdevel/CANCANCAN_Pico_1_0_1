@@ -121,6 +121,7 @@ static void can2040_callback(struct can2040 *cd, uint32_t notify, struct can2040
 }
 
 /// cbus interface shim class - provides an interface-like api to the base cbus functionality
+/// always enabled
 
 cbus_interface::cbus_interface(const byte num, const byte interface_type, CBUSLED &activity_led, CBUSLED &error_led)
   : abstract_interface(num, interface_type, activity_led, error_led) {
@@ -142,7 +143,8 @@ void cbus_interface::enable([[maybe_unused]] const bool new_state) {
 
 void cbus_interface::run(void) {
 
-  // empty
+  // intentionally empty
+  // handled by loop1()
 }
 
 bool cbus_interface::forward_message(can_msg_wrapper_t *wmsg, const bool rewrite) {
@@ -226,7 +228,7 @@ canbus::canbus(const byte num, const byte interface_type, CBUSLED &activity_led,
   PIO pio = (interface_type == INTERFACE_TYPE_CAN_1 ? pio1 : pio2);
 #endif
 
-  byte sms_claimed = 0;
+  uint sms_claimed = 0;
 
   for (uint sm = 0; sm < 4; sm++) {
     if (pio_sm_is_claimed(pio, sm)) {
@@ -237,6 +239,7 @@ canbus::canbus(const byte num, const byte interface_type, CBUSLED &activity_led,
   if (sms_claimed > 0) {
     VLOG("can/%u: *** pio %u, %u sm resources are already claimed", num, interface_type - 1, sms_claimed);
     error_led.pulse();
+    startup_ok = false;
   }
 
   //
@@ -696,14 +699,14 @@ canfdbus::canfdbus(const byte num, const byte interface_type, CBUSLED &activity_
 #endif
 }
 
-bool canfdbus::begin(const bool force_enumeration) {
+bool canfdbus::begin([[maybe_unused]] const bool force_enumeration) {
 
   VLOG("canfd/%u: begin: interface type = %u", num, interface_type);
 
   canid = module_config.readNV(13);  // load can arbitrationid from nv 13
 
 #if HAS_CAN_FD
-  // settings for 4MHz crystal oscillator, 500kbps bus frequency
+  // settings for 4MHz crystal oscillator, 1Mb/s bus frequency
 
   ACAN2517FDSettings settings(ACAN2517FDSettings::OSC_4MHz10xPLL, CAN_FD_BUS_FREQUENCY, DataBitRateFactor::x8);
   settings.mDriverReceiveFIFOSize = CAN_FD_RECEIVE_FIFO_SIZE;
@@ -904,7 +907,7 @@ bool canmcp2515::begin([[maybe_unused]] const bool force_enumeration) {
 
   VLOG("canmcp2515/%u: begin: interface type = %u", num, interface_type);
 
-  canid = module_config.readNV(13);  // load can arbitration id from nv 13
+  canid = EEPROM[14];
 
 #if HAS_EXT_MCP2515
   ACAN2515Settings settings(CAN_EXT_2515_XTAL_FREQUENCY, CAN_EXT_2515_BUS_FREQUENCY);
@@ -1078,7 +1081,8 @@ enum_done:
 
       /// store it
 
-      module_config.writeNV(13, canid);
+      EEPROM[14] = canid;
+      EEPROM.commit();
       VLOG("canmcp2515/%u: canid is now %u", num, canid);
 
     } else {
@@ -1368,7 +1372,7 @@ bool canmcp2518::begin([[maybe_unused]] const bool force_enumeration) {
   VLOG("canmcp2518/%u: begin: interface type = %u", num, interface_type);
 
 #if HAS_EXT_MCP2518
-  canid = module_config.readNV(13);  // load can arbitration id from nv 13
+  canid = EEPROM[14];
 
   // ACAN2517Settings settings(ACAN2517Settings::OSC_4MHz10xPLL, MCP2518_BUS_FREQUENCY);
   // settings.mRequestedMode = ACAN2517Settings::Normal20B;
@@ -1541,7 +1545,8 @@ enum_done:
 
       /// store it
 
-      module_config.writeNV(13, canid);
+      EEPROM[14] = canid;
+      EEPROM.commit();
       VLOG("canmcp2518/%u: canid is now %u", num, canid);
 
     } else {

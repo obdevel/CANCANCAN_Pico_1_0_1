@@ -87,6 +87,7 @@ public:
   // member variables common to all derived classes
 
   bool enabled;
+  bool startup_ok = true;
   byte num, interface_type, canid, default_action_when_source, default_action_when_destination, interface_status;
   queue_t input_queue, *ciq, *coq;
 

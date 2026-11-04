@@ -34,7 +34,12 @@
 */
 
 /*
-  CANCANCAN 1 0 0
+  CANCANCAN 1 0 1
+
+  EEPROM usage:
+
+  12, 13 - CAN ID for secondary can2040 CBUS interfaces
+  14     - CANID for secondary 2515 or 2518 CBUS interface
 
   NV usage: (30)
 
@@ -54,8 +59,6 @@
   13  - CAN-FD or CAN-backbone arbitration ID
   14  - first dynamic discovery delay - in seconds
   15  - dynamic bus discovery repeat interval - in minutes - 0 to disable
-  16  - rules file encoding type, text = 0, json = 1
-  17  - 
 
   20  - default action for messages arriving on interface 0, if no explicit rule matches, when source
   21  - ... 1
@@ -177,7 +180,7 @@ void setupCBUS(void) {
   CBUSParams params(module_config);
   params.setVersion(VER_MAJ, VER_MIN, VER_BETA);
   params.setModuleId(MODULE_ID);
-  params.setFlags(PF_FLiM | PF_COMBI | PF_COE);
+  params.setFlags(PF_FLiM | PF_COMBI);
 
   /// assign to CBUS
 
@@ -211,6 +214,8 @@ void setupCBUS(void) {
     EEPROM[12] = 0;  // reset can interface can ids, eeprom commit not necessary
     EEPROM[13] = 0;
 
+    /// no secondary buses configured
+
     module_config.writeNV(6, 1);  // enable secondary interfaces at startup
     module_config.writeNV(8, 1);  // allow module config from secondary buses
     module_config.writeNV(9, 1);  // CAN filter engine - drop enumeration traffic & rewrite can ids for all other messages
@@ -220,6 +225,7 @@ void setupCBUS(void) {
     module_config.writeNV(13, 1);   // CAN-FD or external MCP2515/8 arbitration ID, or SPE node ID
     module_config.writeNV(14, 30);  // first can bus discovery after, secs
     module_config.writeNV(15, 2);   // subsequent can bus discovery frequency, mins
+    module_config.writeNV(16, 1);   // rules file format is json
 
     module_config.writeNV(20, RULE_RESULT_DROP_MESSAGE);  // default action for interface 0 if no matching rule, when source
     module_config.writeNV(21, RULE_RESULT_DROP_MESSAGE);
@@ -296,11 +302,13 @@ void setup(void) {
 
   Serial.begin(SERIAL_BAUDRATE);
 
+  // delay(10000);
+
   /// pause for serial connection to be established if USB power is detected
 
   if (usb_power_detected()) {
     while (!Serial && millis() - stimer <= SERIAL_TIMEOUT) {
-      delay(50);
+      // delay(50);
     }
   }
 
@@ -321,8 +329,7 @@ void setup(void) {
   /// reset network config
 
   /// mount filesystem and list contents
-
-  mount_local_filesystem();
+  /// mount_local_filesystem();
 
   /// create input and output queues for primary cbus interface
   /// command queue to router thread on core 1
@@ -404,6 +411,7 @@ void setup(void) {
   /// setup complete
 
   VLOG("setup: free memory = %u", module_config.freeSRAM());
+  VLOG("setup: sizeof rule_t = %u", sizeof(rule_t));
   VLOG("setup: complete");
   VLOG("");
 
@@ -484,8 +492,11 @@ void loop1(void) {
 
     CANFrame cbus_msg = convert_can2040_to_cbus(&wmsg.msg);  // convert can2040 message type to CBUS library type
 
+    unsigned long t = micros() - wmsg.timestamp;
+    VLOG("loop1: forwarding message to primary bus, t = %u", t);
+
     /// the sendMessageNoUpdate() function does not call the transmithandler, avoiding a message loop
-    VLOG("loop1: forwarding message to primary bus = %s", format_can_message(&cbus_msg));
+
     CBUS.sendMessageNoUpdate(&cbus_msg);
 
     /// optionally, forward the message to cbus processor (nv 8)
@@ -498,7 +509,7 @@ void loop1(void) {
   }
 }
 
-/// called by the CBUS library whenever a previously taught event is received - core 0
+/// called by the CBUS library whenever a previously taught event is received - core 1
 
 void eventhandler(byte index, CANFrame *msg) {
 
@@ -537,7 +548,7 @@ void eventhandler(byte index, CANFrame *msg) {
   return;
 }
 
-/// called by the CBUS library for every message received from the primary CAN bus - core 0
+/// called by the CBUS library for every message received from the primary CAN bus - core 1
 
 void framehandler(CANFrame *msg) {
 
@@ -556,7 +567,7 @@ void framehandler(CANFrame *msg) {
   return;
 }
 
-/// called for every message produced by the CBUS library sendMessage() function - core 0
+/// called for every message produced by the CBUS library sendMessage() function - core 1
 
 void transmithandler(CANFrame *msg) {
 
@@ -578,15 +589,17 @@ void transmithandler(CANFrame *msg) {
 
 bool find_taught_producer_event(const byte ev2, byte *index) {
 
+  bool found = false;
+
   for (byte i = 0; i < module_config.EE_MAX_EVENTS; i++) {
-    if (module_config.evhashtbl[i] > 0 && module_config.getEventEVval(i, 2) == ev2) {
+    if (module_config.evhashtbl[i] > 0 && module_config.getEventEVval(i, 1) == 1 && module_config.getEventEVval(i, 2) == ev2) {
       *index = i;
-      return true;
+      found = true;
       break;
     }
   }
 
-  return false;
+  return found;
 }
 
 /// send a taught producer event message by ev2, if it exists
@@ -595,14 +608,14 @@ bool find_taught_producer_event(const byte ev2, byte *index) {
 void send_producer_event_by_ev2(const byte ev2, const bool is_on_polarity) {
 
   byte index;
-  CANFrame cbus_msg;
+  can_msg_wrapper_t wmsg;
 
   if (find_taught_producer_event(ev2, &index)) {
-    cbus_msg.len = 5;
-    cbus_msg.data[0] = is_on_polarity ? OPC_ACON : OPC_ACOF;
-    module_config.readEvent(index, &cbus_msg.data[1]);
+    wmsg.msg.dlc = 5;
+    wmsg.msg.data[0] = is_on_polarity ? OPC_ACON : OPC_ACOF;
+    module_config.readEvent(index, &wmsg.msg.data[1]);
 
-    CBUS.sendMessage(&cbus_msg);
+    queue_try_add(&bus0_output_queue, &wmsg);
   }
 
   return;
@@ -689,6 +702,13 @@ void execute_serial_command(char *serial_command) {
 
       for (byte i = 0; i < 20; i++) {
         VLOG(" %02u = %u", i, EEPROM[i]);
+      }
+
+      break;
+
+    case 'f':
+      if (GCtoCAN(tokens[1], &wmsg.msg)) {
+        queue_try_add(&canbus1_input_queue, &wmsg);
       }
 
       break;
@@ -798,6 +818,13 @@ void execute_serial_command(char *serial_command) {
     case 'x':
       if (rtr->discoverer != nullptr) {
         rtr->discoverer->print_database();
+      }
+
+      break;
+
+    case 'y':
+      if (rtr->engine->ruleset != nullptr) {
+        rtr->engine->print_ruleset();
       }
 
       break;

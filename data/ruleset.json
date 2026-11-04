@@ -1,4 +1,42 @@
 [
-	{"source":"[012345]", "class":"EVENT", "pattern":"*:*", "action":"R", "destination":"[012345]", "stop":"Y"},
-	{"source":"[012345]", "class":"OPCODE", "pattern":"[90,91", "action":"R", "destination":"[012345]", "stop":"Y"}
+  {
+    "source": "[012345]",
+    "class": "EVENT",
+    "pattern": "*:*",
+    "action": "R",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+  {
+    "source": "[012345]",
+    "class": "EVENT",
+    "pattern": "*:*",
+    "action": "=100:+200",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+  {
+    "source": "[012345]",
+    "class": "OPCODE",
+    "pattern": "[90,91]",
+    "action": "R",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+  {
+    "source": "[012345]",
+    "class": "ENUM,CONFIG",
+    "pattern": "*",
+    "action": "D",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+  {
+    "source": "[012345]",
+    "class": "EXTENDED",
+    "pattern": "*",
+    "action": "D",
+    "destination": "[012345]",
+    "stop": "Y"
+  }
 ]

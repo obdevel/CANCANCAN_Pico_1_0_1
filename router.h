@@ -58,6 +58,7 @@ public:
   void enable(const bool enabled);
 
   can_bus_discoverer *discoverer;
+  abstract_filter_engine *engine;
 
 private:
   void route_single_message(const byte source, can_msg_wrapper_t *wmsg);
@@ -77,7 +78,6 @@ private:
   unsigned long last_node_discovery_at;
 
   abstract_interface *interfaces[MAX_INTERFACES];
-  abstract_filter_engine *engine;
   interface_list_t default_interface_list;
 };
 

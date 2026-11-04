@@ -105,6 +105,7 @@ typedef struct {
   char pattern[MAX_PATTERN_LEN];                               // pattern expression to match
   char pattern_parts[16][2];                                   // the two parts of the event pattern broken out
   char action_text[MAX_ACTION_TEXT_LEN];                       // the action text
+  byte num_actions;                                            // number of active parts, 0, 1 or 2
   action_t actions[2];                                         // an action for each of NN and EN/DN parts
   bool stop_on_match;                                          // whether to process further rules if this one matches
 } rule_t;

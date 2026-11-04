@@ -73,17 +73,18 @@ extern CBUSLED error_led;
 
 String html_form_wifi = "<html>"
                         "<head>"
-                        "<title>CBUS CANCANCAN Network Router Configuration</title>"
+                        "<title>CANCANCAN Network Router Configuration</title>"
                         "</head>"
                         "<body>"
-                        "<h2>CBUS CANCANCAN Network Router Configuration</h2><br>"
+                        "<h2>CANCANCAN Network Router Configuration</h2><br>"
                         "<form method='post' enctype='application/x-www-form-urlencoded' action='/postform'>"
                         "<div>"
                         "Code version: {{VER}}<br>"
+                        "Network type: {{NET_TYPE}}<br>"
                         "</div>"
                         "<div>"
                         "<br>"
-                        "Wifi mode: "
+                        "WiFi mode: "
                         "<input type='radio' name='mode' value='STA' {{MODE_STA}}> Station "
                         "<input type='radio' name='mode' value='AP' {{MODE_AP}}> Access point"
                         "</div>"
@@ -135,6 +136,14 @@ void handle_root(void) {
   html_form.replace("{{HOSTNAME}}", String(netcfg.hostname));
   html_form.replace("{{SERVER}}", String(netcfg.server));
   html_form.replace("{{PORT}}", String(netcfg.port));
+
+#if defined(IS_WIFI_DEVICE)
+  html_form.replace("{{NET_TYPE}}", "WiFi");
+#endif
+
+#if defined(IS_ETHERET_DEVICE)
+  html_form.replace("{{NET_TYPE}}", "Ethernet");
+#endif
 
   webserver->send(200, "text/html", html_form);
   return;

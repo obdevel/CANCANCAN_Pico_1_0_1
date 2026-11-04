@@ -34,31 +34,6 @@
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE
 */
 
-/*
-  Rule definition:
-
-  5 space-delimted tokens
-
-  source-interfaces message-class pattern action destination-interfaces
-
-  for every message
-    from a source interfaces ?
-      matches message class ?
-        matches nn:en or opcode pattern ? (events & opcode only)
-          execute action - forward, drop, rewrite
-            copy in destintion interfaces
-              return stop-on-match
-
-  e.g.
-
-  [01234] EVENT *:* F [01234] Y     - from all interfaces, event message class, match all, forward, to all interfaces
-
-  [0] DCC * D [0] N                 - from interface 0, DCC message class, match all, drop
-
-  [1] OPCODE 23,24 D [1] N         - from interface 1, opcode class, match specific, drop
-
-*/
-
 #include <ArduinoJson.h>
 
 #include <cstdlib>
@@ -170,53 +145,50 @@ bool copy_files_from_sd_card(void) {
 
     for (byte i = 0; i < MAX_RULESET_FILES; i++) {
 
-      for (byte ft = 0; ft < 2; ft++) {
+      if (i == 0) {
+        strcpy(filename, RULESET_JSON_FILENAME);
+      } else {
+        sprintf(filename, RULESET_JSON_FILESPEC, i);
+      }
 
-        if (i == 0) {
-          strcpy(filename, (ft == 0 ? RULESET_TEXT_FILENAME : RULESET_JSON_FILENAME));
-        } else {
-          sprintf(filename, (ft == 0 ? RULESET_TEXT_FILESPEC : RULESET_JSON_FILESPEC), i);
+      if (!SDFS.exists(filename)) {
+        VLOG("copy_files_from_sd_card: *** SD card does not contain ruleset file = %s", filename);
+        continue;
+
+      } else {
+
+        if (LittleFS.exists(filename)) {
+          VLOG("copy_files_from_sd_card: destination file exists, will overwrite");
         }
 
-        if (!SDFS.exists(filename)) {
-          VLOG("copy_files_from_sd_card: *** SD card does not contain ruleset file = %s", filename);
-          continue;
+        VLOG("copy_files_from_sd_card: copying file %s from SD card", filename);
 
-        } else {
+        if (!(f1 = SDFS.open(filename, "r"))) {
+          VLOG("copy_files_from_sd_card: *** unable to open source file");
+          error_led.pulse();
+        }
 
-          if (LittleFS.exists(filename)) {
-            VLOG("copy_files_from_sd_card: destination file exists, will overwrite");
-          }
-
-          VLOG("copy_files_from_sd_card: copying file %s from SD card", filename);
-
-          if (!(f1 = SDFS.open(filename, "r"))) {
-            VLOG("copy_files_from_sd_card: *** unable to open source file");
-            error_led.pulse();
-          }
-
-          if (!(f2 = LittleFS.open(filename, "w"))) {
-            VLOG("copy_files_from_sd_card: *** unable to open destination file");
-            f1.close();
-            error_led.pulse();
-          }
-
-          bytes_copied = 0;
-
-          VLOG("copy_files_from_sd_card: copying file, size = %u ...", f1.size());
-
-          while ((r = f1.read(buffer, FILE_COPY_BUFFER_SIZE)) > 0) {
-            f2.write(buffer, r);
-            bytes_copied += r;
-          }
-
+        if (!(f2 = LittleFS.open(filename, "w"))) {
+          VLOG("copy_files_from_sd_card: *** unable to open destination file");
           f1.close();
-          f2.close();
-          ++files_copied;
-
-          VLOG("copy_files_from_sd_card: file copy complete, wrote %u bytes", bytes_copied);
-          total_bytes += bytes_copied;
+          error_led.pulse();
         }
+
+        bytes_copied = 0;
+
+        VLOG("copy_files_from_sd_card: copying file, size = %u ...", f1.size());
+
+        while ((r = f1.read(buffer, FILE_COPY_BUFFER_SIZE)) > 0) {
+          f2.write(buffer, r);
+          bytes_copied += r;
+        }
+
+        f1.close();
+        f2.close();
+        ++files_copied;
+
+        VLOG("copy_files_from_sd_card: file copy complete, wrote %u bytes", bytes_copied);
+        total_bytes += bytes_copied;
       }
     }
 
@@ -228,7 +200,7 @@ bool copy_files_from_sd_card(void) {
   return (files_copied > 0);
 }
 
-/// load config from local file into memory structure
+/// load json ruleset data from local file into memory structure
 
 bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool reload_from_sdcard) {
 
@@ -236,27 +208,7 @@ bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool r
   byte num_rules_processed = 0;
   File f;
 
-  VLOG("load_ruleset_file: loading ruleset file ...");
-
-  // check rules file encoding type
-
-  byte rules_file_encoding_tyoe = module_config.readNV(16);
-
-  switch (rules_file_encoding_tyoe) {
-
-    case RULES_FILE_TYPE_TEXT:
-      VLOG("load_ruleset_file: expecting text encoded rules file");
-      break;
-
-    case RULES_FILE_TYPE_JSON:
-      VLOG("load_ruleset_file: expecting json encoded rules file");
-      break;
-
-    default:
-      VLOG("load_ruleset_file: *** unknown rules file encoding type");
-      return false;
-      break;
-  }
+  VLOG("load_ruleset_file: loading ruleset file");
 
   // mount localfilesystem if required
 
@@ -273,18 +225,20 @@ bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool r
 
   if (reload_from_sdcard) {
     if (copy_files_from_sd_card()) {
-      VLOG("load_ruleset_file: new file(s) loaded from SD card");
+      VLOG("load_ruleset_file: new file(s) copied from SD card");
     } else {
-      VLOG("load_ruleset_file: no files loaded from SD card");
+      VLOG("load_ruleset_file: no files copied from SD card");
     }
+  } else {
+    VLOG("load_ruleset_file: not copying updated files from SD card");
   }
 
   /// determine filename version
 
   if (file_version == 0) {
-    strcpy(filename, (rules_file_encoding_tyoe == RULES_FILE_TYPE_TEXT ? RULESET_TEXT_FILENAME : RULESET_JSON_FILENAME));
+    strcpy(filename, RULESET_JSON_FILENAME);
   } else {
-    sprintf(filename, (rules_file_encoding_tyoe == RULES_FILE_TYPE_TEXT ? RULESET_TEXT_FILESPEC : RULESET_JSON_FILESPEC), file_version);
+    sprintf(filename, RULESET_JSON_FILESPEC, file_version);
   }
 
   /// open config file from local filesystem
@@ -295,7 +249,7 @@ bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool r
     return false;
   }
 
-  VLOG("load_ruleset_file: loading ruleset from file %s", filename);
+  VLOG("load_ruleset_file: loading ruleset from file = %s", filename);
 
   if (!(f = LittleFS.open(filename, "r"))) {
     VLOG("load_ruleset_file: *** unable to open %s for reading", filename);
@@ -310,11 +264,7 @@ bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool r
 
   // parse the contents of the open file into a ruleset structure, according to encoding
 
-  if (rules_file_encoding_tyoe == RULES_FILE_TYPE_TEXT) {
-    num_rules_processed = process_rules_file_as_text(f, ruleset);
-  } else {
-    num_rules_processed = process_rules_file_as_json(f, ruleset);
-  }
+  num_rules_processed = process_rules_file_as_json(f, ruleset);
 
   VLOG("load_ruleset_file: ruleset load complete, %u rules loaded", num_rules_processed);
   f.close();
@@ -322,252 +272,181 @@ bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool r
   return true;
 }
 
-/// parse a rules file encoded as text
-
-byte process_rules_file_as_text(File &f, ruleset_t *ruleset) {
-
-  char line_buffer[MAX_RULE_LINE_LENGTH];
-  unsigned int line_num = 0, rule_num = 0;
-  size_t r;
-
-  VLOG("process_rules_file_as_text: processing input file...");
-
-  while ((r = f.readBytesUntil('\n', line_buffer, MAX_RULE_LINE_LENGTH - 1)) > 0) {
-
-    line_buffer[r] = 0;  // terminate
-    ++line_num;
-
-    if (line_buffer[r - 1] == '\r') {  // remove trailing CR if present
-      line_buffer[r - 1] = 0;
-    }
-
-    VLOG("load_ruleset_file: read line: [%3u] [%s]", r, line_buffer);
-
-    /// discard comments and blank lines
-
-    if (line_buffer[0] == '#' || line_buffer[0] == '/' || line_buffer[0] == 0) {
-      continue;
-    }
-
-    /// parse this line
-
-    if (parse_text_rule_definition(line_buffer, &ruleset->rules[rule_num])) {
-      VLOG("load_ruleset_file: parsed rule %u at line %u ok", rule_num, line_num);
-      ++rule_num;
-    } else {
-      VLOG("load_ruleset_file: failed to parse rule at line %u", line_num);
-    }
-  }
-
-  return rule_num;
-}
-
 /// parse a rules file encoded as json
 
 byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
-  uint8_t *json_text;
+  bool rule_has_event_message_class, rule_has_opcode_message_class;
+  char *ptr, *dupe2, *dupe3;
   byte num_rules = 0;
-  size_t s, r;
 
-  JsonDocument json_doc;  // the parsed json document
-  JsonArray arr;          // representation of the rules list
+  VLOG("process_rules_file_as_json: processing input file");
 
-  s = min(MAX_JSON_DATA_SIZE, f.size());
-
-  if ((json_text = (uint8_t *)malloc(s)) == nullptr) {
-    VLOG("process_rules_file_as_json: *** out of memory");
-    return 0;
-  }
-
-  VLOG("process_rules_file_as_json: processing input file...");
-
-  r = f.read(json_text, MAX_JSON_DATA_SIZE);
-
-  VLOG("process_rules_file_as_json: read %u bytes", r);
-
-  DeserializationError json_error = deserializeJson(json_doc, json_text);
+  JsonDocument json_doc;
+  DeserializationError json_error = deserializeJson(json_doc, f);
 
   if (json_error) {
     VLOG("process_rules_file_as_json: *** json deserialisation error %u/%s", json_error.code(), json_error.c_str());
-    goto bailout;
+    return 0;
   }
 
-  // arr = json_doc.as<JsonArray>();
-  arr = json_doc["rules"].as<JsonArray>();
+  VLOG("process_rules_file_as_json: json data deserialised ok");
 
-  for (JsonVariant value : arr) {
-    VLOG(" * %s", value["source"].as<const char *>());
+  for (JsonObject rule : json_doc.as<JsonArray>()) {
+
+    VLOG("--");
+    VLOG("process_rules_file_as_json: processing rule %u", num_rules);
+
+    const char *source = rule["source"];
+    const char *cls = rule["class"];
+    const char *pattern = rule["pattern"];
+    const char *action = rule["action"];
+    const char *destination = rule["destination"];
+    const char *stop = rule["stop"];
+
+    VLOG(" * %2u: %s, %s, %s, %s, %s, %s", num_rules, source, cls, pattern, action, destination, stop);
+
+    // 0. convert the input interface list to an array, e.g. [0123] -> ...
+
+    convert_interface_list_string_to_interfaces_type(rule["source"], &ruleset->rules[num_rules].source_interfaces);
+
+    // 1. convert the message class list, e.g. DCC,MISC -> ...
+
+    if (!convert_message_class_list(rule["class"], &ruleset->rules[num_rules].message_classes)) {
+      VLOG("process_rules_file_as_json: %u: *** error in message class list", num_rules);
+      goto cleanup_json;
+    }
+
+    ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_NONE;
+
+    rule_has_event_message_class = false;
+
+    for (byte k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
+      if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_EVENT) {
+        rule_has_event_message_class = true;
+        ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_EVENT;
+        break;
+      }
+    }
+
+    rule_has_opcode_message_class = false;
+
+    for (byte k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
+      if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_OPCODE) {
+        rule_has_opcode_message_class = true;
+        ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_OPCODE_LIST;
+        break;
+      }
+    }
+
+    // 2. pattern - only meaningful for opcodes, events and other messages with an nn part in bytes 1 and 2
+
+    // doesn't make sense to specify both opcode and event messages classes
+    // because we can't provide patterns for both
+
+    if (rule_has_event_message_class && rule_has_opcode_message_class) {
+      VLOG("process_rules_file_as_json: %u: *** cannot specify both opcode and event message classes", num_rules);
+      goto cleanup_json;
+    }
+
+    strncpy(ruleset->rules[num_rules].pattern, rule["pattern"], MAX_PATTERN_LEN);
+
+    // opcode list pattern - message opcode must match one member of this list
+    // any combination of comma-seperated decimal or hex integer, or OPC_ constant, e.g. [32,0x9,OPC_ACON]
+
+    if (rule_has_opcode_message_class) {
+      if ((ruleset->rules[num_rules].num_opcodes = convert_opcode_list_to_array(ruleset->rules[num_rules].pattern, ruleset->rules[num_rules].opcodes)) == 0) {
+        VLOG("process_rules_file_as_json: %u: *** invalid opcodes pattern", num_rules);
+        goto cleanup_json;
+      }
+
+    } else {
+
+      // event pattern - event type messages and other messages with an nn part must match this pattern
+      // split two parts, one for each of both the nn and en/dn parts, e.g. *10?:?20*
+      // default entry should be a single "*" or "*:*" for events
+
+      dupe2 = strdup(ruleset->rules[num_rules].pattern);
+      byte p = 0;
+
+      ruleset->rules[num_rules].pattern_parts[0][0] = 0;
+      ruleset->rules[num_rules].pattern_parts[1][0] = 0;
+
+      ptr = strtok(dupe2, ":[]");
+
+      while (ptr && p < 2) {
+        strcpy(ruleset->rules[num_rules].pattern_parts[p], ptr);
+        ++p;
+        ptr = strtok(NULL, ":[]");
+      }
+
+      free(dupe2);
+
+      if (p == 0) {
+        VLOG("process_rules_file_as_json: %u: *** error parsing event pattern %s", num_rules, ruleset->rules[num_rules].pattern);
+        goto cleanup_json;
+      } else {
+        VLOG("process_rules_file_as_json: parsed %u pattern parts", p);
+      }
+    }
+
+    // 3. action(s) - drop, forward, event modify spec
+    // one or two parts, e.g. D, R, +20:-30, etc
+
+    strncpy(ruleset->rules[num_rules].action_text, rule["action"], MAX_ACTION_TEXT_LEN);
+    ruleset->rules[num_rules].num_actions = 0;
+
+    dupe3 = strdup(ruleset->rules[num_rules].action_text);
+    ptr = strtok(dupe3, ":[]");
+
+    while (ptr && ruleset->rules[num_rules].num_actions < 2) {
+
+      if (!convert_action_part(ptr, &ruleset->rules[num_rules].actions[ruleset->rules[num_rules].num_actions])) {
+        VLOG("process_rules_file_as_json: %u: *** error parsing action", num_rules);
+        free(dupe3);
+        goto cleanup_json;
+      }
+
+      ++ruleset->rules[num_rules].num_actions;
+      ptr = strtok(NULL, ":[]");
+    }
+
+    free(dupe3);
+
+    VLOG("process_rules_file_as_json: parsed %u action parts", ruleset->rules[num_rules].num_actions);
+
+    // 4. convert output interface range to array
+
+    convert_interface_list_string_to_interfaces_type(rule["destination"], &ruleset->rules[num_rules].destination_interfaces);
+
+    // 5. convert stop-on-match flag
+
+    char flagval[2];
+    strncpy(flagval, rule["stop"], 1);
+    ruleset->rules[num_rules].stop_on_match = (toupper(flagval[0]) == 'Y');
+    VLOG("process_rules_file_as_json: stop on match = %u", ruleset->rules[num_rules].stop_on_match);
+
+    ruleset->rules[num_rules].active = true;
+
+    // end of rule processing
+
+    ++num_rules;
   }
 
-  VLOG("process_rules_file_as_json: deserialised ok");
+cleanup_json:
 
-bailout:
-  free(json_text);
+  VLOG("--");
   return num_rules;
-}
-
-/// parse a text-encoded line from a ruleset file into a rule_t structure
-
-bool parse_text_rule_definition(char *line, rule_t *rule) {
-
-  bool convert_ok = true;
-  bool rule_has_event_message_class = false, rule_has_opcode_message_class = false;
-  char tokens[5][32], *ptr, *dupe, *dupe2, *dupe3;
-  byte part = 0;
-  byte token_count = 0;
-
-  VLOG("parse_text_rule_definition: parsing line [%s]", line);
-
-  /// split into 5 space- or tab-delimited tokens
-  /// source-interfaces message-class(s) pattern action destination-interfaces
-
-  dupe = strdup(line);
-  ptr = strtok(dupe, " \t");
-
-  while (ptr && token_count < TOKENS_PER_RULE) {
-    VLOG(" * %u -> %s", token_count, ptr);
-    strncpy(tokens[token_count++], ptr, sizeof(tokens[0]));
-    ptr = strtok(NULL, " \t");
-  }
-
-  VLOG("parse_text_rule_definition: read %u tokens", token_count);
-
-  if (token_count != TOKENS_PER_RULE) {
-    VLOG("parse_text_rule_definition: *** wrong number of rule tokens, expected %u", TOKENS_PER_RULE);
-    convert_ok = false;
-    goto cleanup;
-  }
-
-  /// parse this rule and populate rule_t structure
-  /// process each token in turn
-
-  // 0. convert the input interface list to an array, e.g. [0123] -> ...
-
-  convert_interface_list_string_to_interfaces_type(tokens[0], &rule->source_interfaces);
-
-  // 1. convert the message class list, e.g. DCC,MISC -> ...
-
-  if (!convert_message_class_list(tokens[1], &rule->message_classes)) {
-    VLOG("parse_text_rule_definition: *** error in message class list");
-    convert_ok = false;
-    goto cleanup;
-  }
-
-  rule->pattern_type = PATTERN_TYPE_NONE;
-
-  for (byte k = 0; k < rule->message_classes.num_classes; k++) {
-    if (rule->message_classes.class_list[k] == MESSAGE_CLASS_EVENT) {
-      rule_has_event_message_class = true;
-      rule->pattern_type = PATTERN_TYPE_EVENT;
-      break;
-    }
-  }
-
-  for (byte k = 0; k < rule->message_classes.num_classes; k++) {
-    if (rule->message_classes.class_list[k] == MESSAGE_CLASS_OPCODE) {
-      rule_has_opcode_message_class = true;
-      rule->pattern_type = PATTERN_TYPE_OPCODE_LIST;
-      break;
-    }
-  }
-
-  // 2. pattern - only meaningful for opcodes or event message filters
-
-  // doesn't make sense to specify both opcode and event messages classes
-  // because we can't provide patterns for both
-
-  if (rule_has_event_message_class && rule_has_opcode_message_class) {
-    VLOG("parse_text_rule_definition: *** cannot specify both opcode and event message classes");
-    convert_ok = false;
-    goto cleanup;
-  }
-
-  strncpy(rule->pattern, tokens[2], MAX_PATTERN_LEN);
-
-  // opcode list pattern - message opcode must match one member of this list
-  // any combination of comma-seperated decimal or hex integer, or OPC_ constant, e.g. [32,0x9,OPC_ACON]
-
-  if (rule_has_opcode_message_class) {
-    if ((rule->num_opcodes = convert_opcode_list_to_array(rule->pattern, rule->opcodes)) == 0) {
-      VLOG("parse_text_rule_definition: *** invalid opcodes pattern");
-      convert_ok = false;
-      goto cleanup;
-    }
-  }
-
-  // event pattern - event type messages must match this pattern
-  // split two parts, one for each of both the nn and en/dn parts, e.g. *10?:?20*
-
-  if (rule_has_event_message_class) {
-    dupe2 = strdup(rule->pattern);
-    byte p = 0;
-
-    rule->pattern_parts[0][0] = 0;
-    rule->pattern_parts[1][0] = 0;
-
-    ptr = strtok(dupe2, ":");
-
-    while (ptr && p < 2) {
-      strcpy(rule->pattern_parts[p++], ptr);
-      ptr = strtok(NULL, ":");
-    }
-
-    free(dupe2);
-
-    if (p != 2) {
-      VLOG("parse_text_rule_definition: *** error parsing event pattern");
-      convert_ok = false;
-      goto cleanup;
-    }
-  }
-
-  // 3. action(s) - drop, forward, event rewrite spec
-  // one or two parts, e.g. D, R, +20:-30, etc
-
-  strncpy(rule->action_text, tokens[3], MAX_ACTION_TEXT_LEN);
-
-  dupe3 = strdup(rule->action_text);
-  ptr = strtok(dupe3, ":");
-
-  while (ptr && part < 2) {
-
-    if (!convert_action(ptr, &rule->actions[part])) {
-      VLOG("parse_text_rule_definition: *** error parsing action");
-      convert_ok = false;
-      free(dupe3);
-      goto cleanup;
-    }
-
-    ptr = strtok(NULL, ":");
-  }
-
-  free(dupe3);
-
-  // 4. convert output interface range to array
-
-  convert_interface_list_string_to_interfaces_type(tokens[4], &rule->destination_interfaces);
-
-  // 5. convert stop-on-match
-
-  rule->stop_on_match = (ptr[0] == 'Y' || ptr[0] == 'y');
-
-  // end of rule processing
-
-cleanup:  // common exit point for all processing failures
-
-  free(dupe);
-  rule->active = true;
-
-  return convert_ok;
 }
 
 /// convert an action string part, e.g. D, R, +200, =20, etc
 
-bool convert_action(const char *action_text, action_t *action) {
+bool convert_action_part(const char *action_text, action_t *action) {
 
   action->active = true;
   action->value = 0;
+
+  VLOG("convert_action_part: %s", action_text);
 
   switch (action_text[0]) {  // identify the action
 
@@ -604,7 +483,7 @@ bool convert_action(const char *action_text, action_t *action) {
       break;
 
     default:  // unknown action
-      VLOG("convert_action: *** unknown action");
+      VLOG("convert_action_part: *** unknown action");
       action->active = false;
       break;
   }
@@ -619,11 +498,12 @@ bool convert_message_class_list(const char *message_class_text, message_class_li
   bool ok = true;
   char *ptr, *dupe = strdup(message_class_text);
 
+  VLOG("convert_message_class_list: %s", message_class_text);
+
   message_class_list->num_classes = 0;
   ptr = strtok(dupe, ",[]");
 
   while (ptr && message_class_list->num_classes < MAX_CLASSES_PER_RULE) {
-
     if (strncmp(ptr, "ALL", 3) == 0) {
       message_class_list->class_list[message_class_list->num_classes++] = MESSAGE_CLASS_ALL;
 
@@ -657,7 +537,7 @@ bool convert_message_class_list(const char *message_class_text, message_class_li
     } else if (strncmp(ptr, "EXTENDED", 3) == 0) {
       message_class_list->class_list[message_class_list->num_classes++] = MESSAGE_CLASS_EXTENDED;
 
-    } else if (strncmp(ptr, "LONG", 3) == 0) {
+    } else if (strncmp(ptr, "LMSG", 3) == 0) {
       message_class_list->class_list[message_class_list->num_classes++] = MESSAGE_CLASS_LONG_MESSAGE;
 
     } else if (strncmp(ptr, "DATA", 3) == 0) {
@@ -670,7 +550,7 @@ bool convert_message_class_list(const char *message_class_text, message_class_li
       message_class_list->class_list[message_class_list->num_classes++] = MESSAGE_CLASS_DEBUG;
 
     } else {
-      VLOG("parse_text_rule_definition: *** invalid message class specified");
+      VLOG("convert_message_class_list: *** invalid message class specified");
       ok = false;
       break;
     }
@@ -678,6 +558,7 @@ bool convert_message_class_list(const char *message_class_text, message_class_li
     ptr = strtok(NULL, ",[]");
   }
 
+  VLOG("convert_message_class_list: found %u classes", message_class_list->num_classes);
   free(dupe);
   return ok;
 }

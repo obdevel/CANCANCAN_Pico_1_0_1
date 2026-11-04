@@ -50,6 +50,7 @@ public:
   virtual byte process_message(const byte source, struct can2040_msg *msg, filter_context_t *context, interface_list_t *destination_interfaces) = 0;
   virtual void process_command(const byte r) = 0;
 
+  virtual void print_ruleset(void){};
   ruleset_t *ruleset;
 
 private:
@@ -94,6 +95,8 @@ public:
   byte process_message(const byte source, struct can2040_msg *msg, filter_context_t *context, interface_list_t *destination_interfaces) override;
   void process_command(const byte r) override;
 
+  void print_ruleset(void) override;
+
 private:
   byte rules_file_version;
 };
@@ -123,6 +126,8 @@ public:
   bool begin(void *argptr = nullptr, void *argptr2 = nullptr) override;
   byte process_message(const byte source, struct can2040_msg *msg, filter_context_t *context, interface_list_t *destination_interfaces) override;
   void process_command(const byte r) override;
+
+  void print_ruleset(void) override;
 
   can_bus_discoverer *discoverer;
 

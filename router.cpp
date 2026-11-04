@@ -108,12 +108,14 @@ bool message_router::begin(void) {
       VLOG("router: selected pass all engine");
       engine = new pass_all_filter_engine();  // forwards all messages
       ok = engine->begin();
+      engine->ruleset = nullptr;
       break;
 
     case FILTER_ENGINE_CAN:
       VLOG("router: selected can filter engine");
       engine = new can_filter_engine();  // just filters enumeration traffic and rewrites CAN IDs
       ok = engine->begin();
+      engine->ruleset = nullptr;
       break;
 
     case FILTER_ENGINE_CONFIGURABLE:
@@ -126,6 +128,7 @@ bool message_router::begin(void) {
       VLOG("router: selected dynamic filter engine");
       engine = new dynamic_filter_engine();  // dynamic engine
       ok = engine->begin(discoverer);        // pass in bus discoverer instance
+      engine->ruleset = nullptr;
       break;
 
     case FILTER_ENGINE_HYBRID:
@@ -138,6 +141,7 @@ bool message_router::begin(void) {
       VLOG("router: selected user filter engine");
       engine = new user_filter_engine();  // user engine
       ok = engine->begin(discoverer);
+      engine->ruleset = nullptr;
       break;
   }
 
@@ -291,7 +295,15 @@ bool message_router::begin(void) {
 
   for (byte i = 1; i < MAX_INTERFACES; i++) {
     if (interfaces[i] != nullptr) {
+
       VLOG("router: initialising secondary interface %u, type = %u", i, interfaces[i]->interface_type);
+
+      if (!interfaces[i]->startup_ok) {
+        VLOG("router: *** interface %u is in error and deconfigured", i);
+        interfaces[i] = nullptr;
+        continue;
+      }
+
       interfaces[i]->default_action_when_source = module_config.readNV(20 + i);
       interfaces[i]->default_action_when_destination = module_config.readNV(26 + i);
       interfaces[i]->enable(enable_secondary_interfaces_at_startup);
@@ -445,7 +457,7 @@ void message_router::run(void) {
           }
         }
 
-        /// forward this message to other interfaces if message forwardng and source interface are enabled
+        /// route this message via filter engine to other interfaces if message forwardng and source interface are enabled
 
         if (message_forwarding_enabled && interfaces[i]->enabled) {
           route_single_message(i, &wmsg);
