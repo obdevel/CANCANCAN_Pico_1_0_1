@@ -708,6 +708,8 @@ void execute_serial_command(char *serial_command) {
 
     case 'f':
       if (GCtoCAN(tokens[1], &wmsg.msg)) {
+        wmsg.retries = 0;
+        wmsg.timestamp = micros();
         queue_try_add(&canbus1_input_queue, &wmsg);
       }
 

@@ -162,12 +162,11 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
   for (r = context->next_rule_to_process; r < MAX_RULE_ENTRIES; r++) {
 
-    VLOG("configurable_filter_engine: + process_message: rule %u", r);
-
     if (!ruleset->rules[r].active) {  // no more rules
-      VLOG("configurable_filter_engine: process_message: end of rules");
       break;
     }
+
+    VLOG("configurable_filter_engine: + process_message: rule %u", r);
 
     match_flag = false;
 
@@ -579,7 +578,7 @@ byte hybrid_filter_engine::process_message(const byte source, struct can2040_msg
   byte r;
   byte return_value = RULE_RESULT_NO_MATCH;
 
-  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && is_event_opcode(msg);
+  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && !(msg->id & CAN2040_ID_RTR) && msg->dlc >= 5 && is_event_opcode(msg);
 
   /// check each rule in turn until a match is received (class, pattern) or none is matched
 
@@ -591,160 +590,7 @@ byte hybrid_filter_engine::process_message(const byte source, struct can2040_msg
 
     match_flag = false;
 
-    /// 0. match source interface
-
-    for (byte i = 0; i < ruleset->rules[r].source_interfaces.num_interfaces; i++) {
-      if (ruleset->rules[r].source_interfaces.interface_list[i] == source) {
-        match_flag = true;
-        break;
-      }
-    }
-
-    if (!match_flag) {
-      continue;
-    }
-
-    /// 1. check against message class specifier(s)
-
-    for (byte j = 0; j < ruleset->rules->message_classes.num_classes && j < MAX_CLASSES_PER_RULE; j++) {
-
-      switch (ruleset->rules[r].message_classes.class_list[j]) {
-
-        case MESSAGE_CLASS_ALL:
-          break;
-
-        case MESSAGE_CLASS_OPCODE:
-
-          match_flag = false;
-
-          // match the rule's opcode list
-
-          for (byte i = 0; i < ruleset->rules[r].num_opcodes; i++) {
-            if (ruleset->rules[r].opcodes[i] == msg->data[0]) {
-              match_flag = true;
-              break;
-            }
-          }
-
-          if (!match_flag) {
-            continue;
-          }
-
-          break;
-
-        case MESSAGE_CLASS_EVENT:
-          if (!msg_is_event) {
-            continue;
-          }
-
-          break;
-
-        case MESSAGE_CLASS_ENUM:
-          if (!(msg->dlc == 0 || msg->id & CAN2040_ID_RTR)) {
-            continue;
-          }
-
-          break;
-
-        case MESSAGE_CLASS_EXTENDED:
-          if (!(msg->id & CAN2040_ID_EFF)) {
-            continue;
-          }
-
-          break;
-
-        default:
-          match_flag = false;
-
-          for (byte k = 0; k < ruleset->rules[r].message_classes.num_classes; k++) {
-            if (!is_opcode_of_message_class(msg->data[0], ruleset->rules[r].message_classes.class_list[k])) {
-              match_flag = true;
-              break;
-            }
-          }
-
-          break;
-      }
-    }
-
-    /// message class matched
-
-    /// 2. match the event pattern - for events only
-
-    if (msg_is_event) {
-      char nn[8], en[8];
-
-      match_flag = false;
-
-      if (ruleset->rules[r].pattern_parts[0][0] == '*' && ruleset->rules[r].pattern_parts[1][0] == '*') {  // *:* matches every event
-        match_flag = true;
-
-      } else {  // match glob pattern
-
-        snprintf(nn, sizeof(nn), "%u", (msg->data[1] << 8) + msg->data[2]);  // convert nn and en to strings for matching
-        snprintf(en, sizeof(en), "%u", (msg->data[3] << 8) + msg->data[4]);
-
-        /// if the glob pattern parts aren't empty and match both nn and en ...
-
-        if (ruleset->rules[r].pattern_parts[0][0] != 0 && fnmatch(ruleset->rules[r].pattern_parts[0], nn, FNMATCH_FLAGS) == 0) {
-          if (ruleset->rules[r].pattern_parts[1][0] != 0 && fnmatch(ruleset->rules[r].pattern_parts[1], en, FNMATCH_FLAGS) == 0) {
-            match_flag = true;
-          }
-        }
-      }
-
-      if (!match_flag) {
-        continue;
-      }
-    }
-
-    /// event message pattern matched
-
-    /// apply the action(s)
-
-    bool rule_has_event_message_class = false;
-
-    for (byte a = 0; a < NUM_ACTIONS; a++) {
-      if (ruleset->rules[r].actions[a].active) {
-
-        switch (ruleset->rules[r].actions[a].action_type) {
-
-          case ACTION_DROP:
-            return_value = RULE_RESULT_DROP_MESSAGE;
-            break;
-
-          case ACTION_FORWARD:
-            return_value = RULE_RESULT_REWRITE_AND_FORWARD_MESSAGE;
-            break;
-
-          case ACTION_INCREMENT:
-          case ACTION_DECREMENT:
-          case ACTION_EQUALS:
-
-            for (byte k = 0; k < ruleset->rules[r].message_classes.num_classes; k++) {
-              if (ruleset->rules[r].message_classes.class_list[k] == MESSAGE_CLASS_EVENT) {
-                rule_has_event_message_class = true;
-                break;
-              }
-            }
-
-            if (msg_is_event && rule_has_event_message_class) {
-              modify_event_message_with_action(msg, (a == 0 ? EVENT_PART_NN : EVENT_PART_EN),
-                                               ruleset->rules[r].actions[a].action_type, ruleset->rules[r].actions[a].value);
-            } else {
-              modify_non_event_message_with_action(msg, ruleset->rules[r].actions[a].action_type, ruleset->rules[r].actions[a].value);
-            }
-
-            return_value = RULE_RESULT_REWRITE_AND_FORWARD_MESSAGE;
-            break;
-
-          default:
-            return_value = RULE_RESULT_NO_MATCH;
-            continue;
-            break;
-        }
-      }
-    }
+    /// *** TODO - same rule processing as configurable engine
 
     /// for event-type messages, use the discoverer for destination interfaces
 

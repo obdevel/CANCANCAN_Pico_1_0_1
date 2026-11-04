@@ -535,6 +535,10 @@ void message_router::route_single_message(const byte source, can_msg_wrapper_t *
         wmsg->msg = pmsg;
         forward_message_to_interfaces(source, wmsg, &destination_interfaces, true);
         break;
+
+      case RULE_RESULT_UNKNOWN:
+        VLOG("router: *** default rule unknown");
+        break;
     }
   }
 

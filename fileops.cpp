@@ -314,7 +314,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
     if (!convert_message_class_list(rule["class"], &ruleset->rules[num_rules].message_classes)) {
       VLOG("process_rules_file_as_json: %u: *** error in message class list", num_rules);
-      goto cleanup_json;
+      goto bailout;
     }
 
     ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_NONE;
@@ -322,7 +322,9 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
     rule_has_event_message_class = false;
 
     for (byte k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
-      if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_EVENT) {
+      if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_EVENT
+          || ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_LONG_EVENT
+          || ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_SHORT_EVENT) {
         rule_has_event_message_class = true;
         ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_EVENT;
         break;
@@ -346,7 +348,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
     if (rule_has_event_message_class && rule_has_opcode_message_class) {
       VLOG("process_rules_file_as_json: %u: *** cannot specify both opcode and event message classes", num_rules);
-      goto cleanup_json;
+      goto bailout;
     }
 
     strncpy(ruleset->rules[num_rules].pattern, rule["pattern"], MAX_PATTERN_LEN);
@@ -357,7 +359,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
     if (rule_has_opcode_message_class) {
       if ((ruleset->rules[num_rules].num_opcodes = convert_opcode_list_to_array(ruleset->rules[num_rules].pattern, ruleset->rules[num_rules].opcodes)) == 0) {
         VLOG("process_rules_file_as_json: %u: *** invalid opcodes pattern", num_rules);
-        goto cleanup_json;
+        goto bailout;
       }
 
     } else {
@@ -384,7 +386,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
       if (p == 0) {
         VLOG("process_rules_file_as_json: %u: *** error parsing event pattern %s", num_rules, ruleset->rules[num_rules].pattern);
-        goto cleanup_json;
+        goto bailout;
       } else {
         VLOG("process_rules_file_as_json: parsed %u pattern parts", p);
       }
@@ -404,7 +406,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
       if (!convert_action_part(ptr, &ruleset->rules[num_rules].actions[ruleset->rules[num_rules].num_actions])) {
         VLOG("process_rules_file_as_json: %u: *** error parsing action", num_rules);
         free(dupe3);
-        goto cleanup_json;
+        goto bailout;
       }
 
       ++ruleset->rules[num_rules].num_actions;
@@ -426,14 +428,13 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
     ruleset->rules[num_rules].stop_on_match = (toupper(flagval[0]) == 'Y');
     VLOG("process_rules_file_as_json: stop on match = %u", ruleset->rules[num_rules].stop_on_match);
 
-    ruleset->rules[num_rules].active = true;
-
     // end of rule processing
 
+    ruleset->rules[num_rules].active = true;
     ++num_rules;
   }
 
-cleanup_json:
+bailout:
 
   VLOG("--");
   return num_rules;
