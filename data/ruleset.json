@@ -1,8 +1,8 @@
 [
   {
-    "source": "[012345]",
-    "class": "EVENT",
-    "pattern": "*:*",
+    "source": "[4]",
+    "class": "ALL",
+    "pattern": "*",
     "action": "R",
     "destination": "[012345]",
     "stop": "Y"
@@ -10,8 +10,16 @@
   {
     "source": "[012345]",
     "class": "EVENT",
+    "pattern": "*12?:*",
+    "action": "+100:",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+  {
+    "source": "[012345]",
+    "class": "EVENT",
     "pattern": "*:*",
-    "action": "=100:+200",
+    "action": "R",
     "destination": "[012345]",
     "stop": "Y"
   },
@@ -36,6 +44,14 @@
     "class": "EXTENDED",
     "pattern": "*",
     "action": "D",
+    "destination": "[012345]",
+    "stop": "Y"
+  },
+    {
+    "source": "[012345]",
+    "class": "DISC",
+    "pattern": "*",
+    "action": "R",
     "destination": "[012345]",
     "stop": "Y"
   }

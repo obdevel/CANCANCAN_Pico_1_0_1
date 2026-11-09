@@ -36,12 +36,12 @@
 #include <CBUSLED.h>     // CBUS LEDs
 #include <CBUSconfig.h>  // CBUS module configuration
 
-#include <cerrno>
-
 #include "defs.h"
 #include "enums.h"
 #include "types.h"
 #include "funcs.h"
+
+#include <cerrno>
 
 #if defined(IS_NETWORK_DEVICE)
 
@@ -132,10 +132,10 @@ void handle_root(void) {
   html_form.replace("{{PASSWORD}}", String(netcfg.password));
   html_form.replace("{{AP_SSID}}", String(netcfg.ap_ssid));
   html_form.replace("{{AP_PASSWORD}}", String(netcfg.ap_password));
-  html_form.replace("{{SERVICE}}", String(netcfg.servicename));
   html_form.replace("{{HOSTNAME}}", String(netcfg.hostname));
   html_form.replace("{{SERVER}}", String(netcfg.server));
   html_form.replace("{{PORT}}", String(netcfg.port));
+  html_form.replace("{{SERVICE}}", String(netcfg.servicename));
 
 #if defined(IS_WIFI_DEVICE)
   html_form.replace("{{NET_TYPE}}", "WiFi");

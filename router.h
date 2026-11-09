@@ -60,6 +60,8 @@ public:
   can_bus_discoverer *discoverer;
   abstract_filter_engine *engine;
 
+  queue_t internal_queue;
+
 private:
   void route_single_message(const byte source, can_msg_wrapper_t *wmsg);
   void forward_message_to_interfaces(const byte source, can_msg_wrapper_t *wmsg, const interface_list_t *destination_interfaces, bool rewrite_id);

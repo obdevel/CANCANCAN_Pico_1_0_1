@@ -66,16 +66,18 @@ CANFrame convert_can2040_to_cbus(const struct can2040_msg *imsg);
 
 bool usb_power_detected(void);
 
+bool find_taught_producer_event(const byte ev2, byte *index);
+
 int fnmatch(const char *pattern, const char *string, int flags);
 
 bool is_opcode_of_message_class(const byte opcode, const byte message_class);
-bool is_event_opcode(const struct can2040_msg *msg);
-bool is_short_event_opcode(const struct can2040_msg *msg);
-bool is_long_event_opcode(const struct can2040_msg *msg);
+bool is_event_opcode(const byte opcode);
+bool is_short_event_opcode(const byte opcode);
+bool is_long_event_opcode(const byte opcode);
 
 int lookup_opcode_by_name(const char *opcode_name);
 const char *lookup_opcode_by_value(const byte opcode);
-bool message_has_nn(const struct can2040_msg *msg);
+bool message_has_nn(const byte opcode);
 
 bool mount_local_filesystem(void);
 bool load_ruleset_file(const byte file_version, ruleset_t *ruleset, const bool reload_from_sdcard);

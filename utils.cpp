@@ -1,5 +1,3 @@
-#include <cstddef>
-#include "can2040.h"
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -42,6 +40,9 @@
 #include "types.h"
 #include "funcs.h"
 #include "interface.h"
+
+#include <cstddef>
+#include "can2040.h"
 
 extern opcode_t opcode_lookup_table[];
 extern bool enable_serial_debug;
@@ -241,22 +242,24 @@ bool is_opcode_of_message_class(const byte opcode, const byte message_class) {
   return match;
 }
 
-bool is_event_opcode(const struct can2040_msg *msg) {
+bool is_event_opcode(const byte opcode) {
 
-  return (((msg->data[0] & EVENT_SET_MASK) == EVENT_SET_MASK) && ((~(msg->data[0]) & EVENT_CLR_MASK) == EVENT_CLR_MASK) ? true : false);
+  return (((opcode & EVENT_SET_MASK) == EVENT_SET_MASK) && ((~(opcode)&EVENT_CLR_MASK) == EVENT_CLR_MASK) ? true : false);
 }
 
-bool is_short_event_opcode(const struct can2040_msg *msg) {
+bool is_short_event_opcode(const byte opcode) {
 
-  return (is_event_opcode(msg) && (msg->data[0] & EVENT_SHORT_MASK));
+  return (is_event_opcode(opcode) && (opcode & EVENT_SHORT_MASK));
 }
 
-bool is_long_event_opcode(const struct can2040_msg *msg) {
+bool is_long_event_opcode(const byte opcode) {
 
-  return (!is_short_event_opcode(msg));
+  /// *** TODO fixme ?
+
+  return (is_event_opcode(opcode) && !(opcode & EVENT_SHORT_MASK));
 }
 
-/// lookup an opcode name, return the matching OPC_ value
+/// lookup an opcode name string, return the matching constant value
 
 int lookup_opcode_by_name(const char *opcode_name) {
 
@@ -269,7 +272,7 @@ int lookup_opcode_by_name(const char *opcode_name) {
   return -1;
 }
 
-/// lookup an opcode OPC_ value, return the matching name char string
+/// lookup an opcode OPC_ constant value, return the matching name char string
 
 const char *lookup_opcode_by_value(const byte opcode) {
 
@@ -284,12 +287,12 @@ const char *lookup_opcode_by_value(const byte opcode) {
 
 /// does this opcode contain a node number
 
-bool message_has_nn(const struct can2040_msg *msg) {
+bool message_has_nn(const byte opcode) {
 
   bool match = false;
 
   for (byte i = 0; i < NUM_OPCODES; i++) {
-    if (opcode_lookup_table[i].opcode == msg->data[0]) {
+    if (opcode_lookup_table[i].opcode == opcode) {
       match = opcode_lookup_table[i].has_nn;
       break;
     }
@@ -318,7 +321,6 @@ void modify_event_message_with_action(struct can2040_msg *msg, byte which_part, 
 
     default:
       return;
-      break;
   }
 
   // apply the action
@@ -335,7 +337,6 @@ void modify_event_message_with_action(struct can2040_msg *msg, byte which_part, 
       break;
     default:
       return;
-      break;
   }
 
   // modify the message
@@ -353,7 +354,6 @@ void modify_event_message_with_action(struct can2040_msg *msg, byte which_part, 
       break;
     default:
       return;
-      break;
   }
 
   return;
@@ -365,23 +365,29 @@ void modify_non_event_message_with_action(struct can2040_msg *msg, byte action, 
 
   uint32_t msg_part_value;
 
-  if (message_has_nn(msg)) {
+  if (message_has_nn(msg->data[0])) {
+
     msg_part_value = (msg->data[1] << 8) + msg->data[2];
 
     switch (action) {
       case ACTION_INCREMENT:
         msg_part_value += value;
         break;
+
       case ACTION_DECREMENT:
         msg_part_value -= value;
         break;
+
       case ACTION_EQUALS:
         msg_part_value = value;
         break;
+
       default:
         return;
         break;
     }
+
+    // modify the message
 
     msg->data[1] = msg_part_value >> 8;
     msg->data[2] = msg_part_value & 0xff;
@@ -449,7 +455,7 @@ byte convert_opcode_list_to_array(char *opcode_list, byte *arr) {
 
   char *dupe = strdup(opcode_list);  // take a copy as strtok changes it
 
-  ptr = strtok(dupe + 1, ",[]");  // find first comma-delimited token, ignore brackets
+  ptr = strtok(dupe + 1, ",[] ");  // find first comma-delimited token, ignore brackets
 
   while (ptr && index < MAX_OPCODES_PER_RULE) {
 
@@ -467,7 +473,7 @@ byte convert_opcode_list_to_array(char *opcode_list, byte *arr) {
       VLOG("convert_opcode_list_to_array: *** invalid token = %s", ptr);
     }
 
-    ptr = strtok(NULL, ",[]");
+    ptr = strtok(NULL, ",[] ");
   }
 
   free(dupe);
@@ -496,7 +502,7 @@ char *convert_class_list_to_string(const message_class_list_t *classes, char *st
 
 void print_rules(ruleset_t *ruleset) {
 
-  char t0[64], t1[64], t2[64], t3[64], t4[64], t5[64];
+  char t0[64], t1[64], t2[64], t3[64];
   byte r;
 
   VLOG("--");
@@ -509,7 +515,7 @@ void print_rules(ruleset_t *ruleset) {
 
     convert_interfaces_type_to_interface_list_string(&ruleset->rules[r].source_interfaces, t0);
     convert_class_list_to_string(&ruleset->rules[r].message_classes, t1);
-    sprintf(t2, "%u %u:%u %u", ruleset->rules[r].actions[0].action_type, ruleset->rules[r].actions[0].value, ruleset->rules[r].actions[1].action_type, ruleset->rules[r].actions[1].value);
+    sprintf(t2, "%u %lu:%u %lu", ruleset->rules[r].actions[0].action_type, ruleset->rules[r].actions[0].value, ruleset->rules[r].actions[1].action_type, ruleset->rules[r].actions[1].value);
     convert_interfaces_type_to_interface_list_string(&ruleset->rules[r].destination_interfaces, t3);
 
     VLOG(" * [%u] S: %s | C: %8s | P: %u:%s:%s | A: %s | %s |", r, t0, t1, ruleset->rules[r].pattern_type, ruleset->rules[r].pattern_parts[0], ruleset->rules[r].pattern_parts[1], t2, t3);

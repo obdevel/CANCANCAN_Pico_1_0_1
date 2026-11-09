@@ -89,7 +89,7 @@
 #define ETHERNET_CS_PIN 17
 #define ETHERNET_INT_PIN 21
 
-/// CAN-FD and external MCP2515 SPI interfaces
+/// MCP2518 and external MCP2515 SPI interfaces
 
 #define HAS_CAN_FD 0
 #define CAN_FD_BUS_FREQUENCY (1000 * 1000)
@@ -116,7 +116,7 @@
 #define MCP2515_INT_PIN 22
 #define MCP2515_SPI_INSTANCE SPI1
 
-#define HAS_EXT_MCP2518 1
+#define HAS_EXT_MCP2518 0
 #define MCP2518_BUS_FREQUENCY (125 * 1000)
 #define MCP2518_RECEIVE_FIFO_SIZE 128
 #define MCP2518_TRANSMIT_FIFO_SIZE 128
@@ -152,13 +152,13 @@
   {}
 #endif
 
+/// filter engine rulesets
+
 #define RULESET_JSON_FILENAME "/ruleset.json"
 #define RULESET_JSON_FILESPEC "/ruleset%1u.json"
 
 #define MAX_RULESET_FILES 8
 #define FILE_COPY_BUFFER_SIZE 256
-
-#define TOKENS_PER_RULE 6
 
 #define MAX_RULE_ENTRIES 64
 #define MAX_OPCODES_PER_RULE 32
@@ -169,6 +169,8 @@
 #define MAX_CLASSES_PER_RULE 16
 
 #define NUM_FILTER_ENGINES 6
+
+/// network
 
 #define GC_BUFFER_SIZE 64
 #define GC_QUEUE_SIZE 32
@@ -182,11 +184,13 @@
 #define WIFI_RECONNECT_INTERVAL 10000
 #define BRIDGE_RECONNECT_INTERVAL 5000
 
+/// discoverer
+
 #define MAX_CAN_NODES 300
 #define MAX_CONSUMER_EVENTS 1024
 #define BUS_QUERY_DELAY_MS 2000
 
-/// for fnmatch()
+/// for fnmatch() globbing
 
 #define FNMATCH_FLAGS 0
 #define FNMATCH_OK 0
@@ -210,7 +214,7 @@
 
 #define GLOB_METACHARS "*?[]^!"
 
-///
+/// network config
 
 #define NETCFG_EEPROM_SAVE_OFFSET 1024
 #define NETCFG_CHECK_VALUE 99

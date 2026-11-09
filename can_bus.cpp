@@ -50,6 +50,8 @@
 #include "funcs.h"
 #include "interface.h"
 
+#include "pico/util/queue.h"
+
 #if HAS_CAN_FD
 #include <ACAN2517FD.h>
 static ACAN2517FD *canfdptr;
@@ -138,6 +140,8 @@ bool cbus_interface::begin([[maybe_unused]] const bool force_enumeration) {
 
 void cbus_interface::enable([[maybe_unused]] const bool new_state) {
 
+  // always enabled
+
   return;
 }
 
@@ -145,6 +149,8 @@ void cbus_interface::run(void) {
 
   // intentionally empty
   // handled by loop1()
+
+  return;
 }
 
 bool cbus_interface::forward_message(can_msg_wrapper_t *wmsg, const bool rewrite) {
@@ -157,7 +163,7 @@ bool cbus_interface::forward_message(can_msg_wrapper_t *wmsg, const bool rewrite
     rewrite_can_id(wmsg, module_config.CANID);
   }
 
-  queue_try_add(coq, wmsg);
+  queue_add_blocking(coq, wmsg);
   return true;
 }
 
@@ -250,15 +256,9 @@ canbus::canbus(const byte num, const byte interface_type, CBUSLED &activity_led,
 
       VLOG("can/%u: creating message queues", num);
 
-      if (!queue_init(&canbus1_input_queue, sizeof(can_msg_wrapper_t), CAN_QUEUE_SIZE)) {
-        VLOG("can/%u: *** error creating input message queue", num);
-      }
-
+      queue_init(&canbus1_input_queue, sizeof(can_msg_wrapper_t), CAN_QUEUE_SIZE);
       ciq = &canbus1_input_queue;
-
-      if (!queue_init(&tx_retry_queue, sizeof(can_msg_wrapper_t), CAN_TX_RETRY_QUEUE_SIZE)) {
-        VLOG("can/%u: *** error creating retry message queue", num);
-      }
+      queue_init(&tx_retry_queue, sizeof(can_msg_wrapper_t), CAN_TX_RETRY_QUEUE_SIZE);
 
       VLOG("can/%u: creating ACAN2040 object using pio instance 1", num);
       can = new ACAN2040(1, CAN_TX_PIN_1, CAN_RX_PIN_1, CAN_BITRATE, F_CPU, can2040_callback);
@@ -268,15 +268,9 @@ canbus::canbus(const byte num, const byte interface_type, CBUSLED &activity_led,
 
       VLOG("can/%u: creating message queues", num);
 
-      if (!queue_init(&canbus2_input_queue, sizeof(can_msg_wrapper_t), CAN_QUEUE_SIZE)) {
-        VLOG("can/%u: *** error creating input message queue", num);
-      }
-
+      queue_init(&canbus2_input_queue, sizeof(can_msg_wrapper_t), CAN_QUEUE_SIZE);
       ciq = &canbus2_input_queue;
-
-      if (!queue_init(&tx_retry_queue, sizeof(can_msg_wrapper_t), CAN_TX_RETRY_QUEUE_SIZE)) {
-        VLOG("can/%u: *** error creating retry message queue", num);
-      }
+      queue_init(&tx_retry_queue, sizeof(can_msg_wrapper_t), CAN_TX_RETRY_QUEUE_SIZE);
 
       VLOG("can/%u: creating ACAN2040 object using pio instance 2", num);
       can = new ACAN2040(2, CAN_TX_PIN_2, CAN_RX_PIN_2, CAN_BITRATE, F_CPU, can2040_callback);

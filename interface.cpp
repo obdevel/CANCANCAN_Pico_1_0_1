@@ -1,4 +1,4 @@
-#include <sys/_types.h>
+#include "WiFiClass.h"
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -44,6 +44,8 @@
 #include "types.h"
 #include "funcs.h"
 #include "interface.h"
+
+#include <sys/_types.h>
 
 #if defined(IS_NETWORK_DEVICE)
 #include <WiFi.h>
@@ -208,10 +210,10 @@ bool network::begin([[maybe_unused]] const bool force_enumeration) {
       } else {
 
         // start wifi in station mode
-        VLOG("network/%u: initiating connection to wifi as STA", num);
+        VLOG("network/%u: initiating connection to wifi as STA: %s/%s", num, netcfg.ssid, netcfg.password);
         WiFi.mode(WIFI_STA);
         WiFi.begin(netcfg.ssid, netcfg.password);
-        VLOG("network/%u: initiated connection to wifi, status = %u/%s", num, last_network_status, net_status_names[last_network_status]);
+        VLOG("network/%u: initiated connection to wifi, status = %u/%s", num, WiFi.status(), net_status_names[WiFi.status()]);
       }
 
       last_network_status = WiFi.status();

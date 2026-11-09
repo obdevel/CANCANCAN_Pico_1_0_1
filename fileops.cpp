@@ -1,4 +1,3 @@
-#include <cstring>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -48,6 +47,8 @@
 #include "enums.h"
 #include "types.h"
 #include "funcs.h"
+
+#include <cstring>
 
 extern CBUSConfig module_config;
 extern CBUSLED error_led;
@@ -366,7 +367,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
       // event pattern - event type messages and other messages with an nn part must match this pattern
       // split two parts, one for each of both the nn and en/dn parts, e.g. *10?:?20*
-      // default entry should be a single "*" or "*:*" for events
+      // default entry should be "*:*" for events or a single "*" for all other message types
 
       dupe2 = strdup(ruleset->rules[num_rules].pattern);
       byte p = 0;

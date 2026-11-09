@@ -1,3 +1,4 @@
+#include <cstddef>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -136,7 +137,7 @@ bool can_bus_discoverer::get_interface_for_node(const uint16_t node_number, byte
 
   bool found = false;
 
-  for (int i = 0; i < nodes_index; i++) {
+  for (size_t i = 0; i < nodes_index; i++) {
     if (can_nodes[i].node_number == node_number) {
       *interface_num = can_nodes[i].interface_num;
       found = true;
@@ -157,7 +158,7 @@ bool can_bus_discoverer::get_consumer_interfaces_for_event(const struct can2040_
 
   // zero nn bytes for short events
 
-  if (is_short_event_opcode(msg)) {
+  if (is_short_event_opcode(msg->data[0])) {
     msg_copy.data[1] = 0;
     msg_copy.data[2] = 0;
   }
@@ -168,7 +169,7 @@ bool can_bus_discoverer::get_consumer_interfaces_for_event(const struct can2040_
 
   // iterate over consumer events database
 
-  for (int i = 0; i < MAX_CONSUMER_EVENTS && i < events_index; i++) {
+  for (size_t i = 0; i < MAX_CONSUMER_EVENTS && i < events_index; i++) {
 
     if (consumer_events[i].b1 == msg_copy.data[1] && consumer_events[i].b2 == msg_copy.data[2] && consumer_events[i].b3 == msg_copy.data[3] && consumer_events[i].b4 == msg_copy.data[4]) {
 
@@ -178,7 +179,7 @@ bool can_bus_discoverer::get_consumer_interfaces_for_event(const struct can2040_
 
       bool dupe = false;
 
-      for (byte j = 0; j < MAX_INTERFACES; j++) {
+      for (size_t j = 0; j < MAX_INTERFACES; j++) {
         if (interfaces->interface_list[j] == consumer_events[i].interface_num) {
           dupe = true;
           break;

@@ -1,3 +1,4 @@
+#include <cstddef>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -151,12 +152,12 @@ bool configurable_filter_engine::begin(void *argptr1, [[maybe_unused]] void *arg
 byte configurable_filter_engine::process_message(const byte source, struct can2040_msg *msg, filter_context_t *context, interface_list_t *destination_interfaces) {
 
   bool match_flag = false;
-  byte r;
+  size_t r;
   byte return_value = RULE_RESULT_NO_MATCH;
 
-  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && !(msg->id & CAN2040_ID_RTR) && msg->dlc >= 5 && is_event_opcode(msg);
+  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && !(msg->id & CAN2040_ID_RTR) && msg->dlc >= 5 && is_event_opcode(msg->data[0]);
 
-  /// check each rule in turn until a match is found (class, pattern) or none is matched
+  /// check each rule in turn until a match is found (source, class, pattern) or none is matched
 
   VLOG("configurable_filter_engine: process_message begins at rule %u", context->next_rule_to_process);
 
@@ -174,7 +175,7 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
     VLOG("configurable_filter_engine: matching source %u", source);
 
-    for (byte i = 0; i < ruleset->rules[r].source_interfaces.num_interfaces; i++) {
+    for (size_t i = 0; i < ruleset->rules[r].source_interfaces.num_interfaces; i++) {
       if (ruleset->rules[r].source_interfaces.interface_list[i] == source) {
         match_flag = true;
         break;
@@ -191,11 +192,14 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
     VLOG("configurable_filter_engine: matching message class");
 
-    for (byte j = 0; j < ruleset->rules->message_classes.num_classes && j < MAX_CLASSES_PER_RULE; j++) {
+    for (size_t j = 0; j < ruleset->rules->message_classes.num_classes && j < MAX_CLASSES_PER_RULE; j++) {
+
+      match_flag = false;
 
       switch (ruleset->rules[r].message_classes.class_list[j]) {
 
         case MESSAGE_CLASS_ALL:
+          match_flag = true;
           break;
 
         case MESSAGE_CLASS_OPCODE:
@@ -204,8 +208,8 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
           // match the rule's opcode list
 
-          for (byte i = 0; i < ruleset->rules[r].num_opcodes; i++) {
-            if (ruleset->rules[r].opcodes[i] == msg->data[0]) {
+          for (size_t k = 0; k < ruleset->rules[r].num_opcodes; k++) {
+            if (ruleset->rules[r].opcodes[k] == msg->data[0]) {
               match_flag = true;
               break;
             }
@@ -226,7 +230,7 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
           break;
 
         case MESSAGE_CLASS_LONG_EVENT:
-          if (!!is_long_event_opcode(msg)) {
+          if (!msg_is_event || !is_long_event_opcode(msg->data[0])) {
             match_flag = false;
             continue;
           }
@@ -234,7 +238,7 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
           break;
 
         case MESSAGE_CLASS_SHORT_EVENT:
-          if (!is_short_event_opcode(msg)) {
+          if (!msg_is_event || !is_short_event_opcode(msg->data[0])) {
             match_flag = false;
             continue;
           }
@@ -260,20 +264,24 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
           break;
 
         default:
-          match_flag = false;
 
-          for (byte k = 0; k < ruleset->rules[r].message_classes.num_classes; k++) {
-            if (!is_opcode_of_message_class(msg->data[0], ruleset->rules[r].message_classes.class_list[k])) {
-              match_flag = true;
-              break;
-            }
+          if ((match_flag = is_opcode_of_message_class(msg->data[0], ruleset->rules[r].message_classes.class_list[j]))) {
+            VLOG("configurable_filter_engine: match on class = %u", ruleset->rules[r].message_classes.class_list[j]);
+            match_flag = true;
+            break;
+          } else {
+            continue;
           }
 
           break;
       }
+
+      if (match_flag) {  // a class has been matched, so no need to check others
+        break;
+      }
     }
 
-    if (!match_flag) {
+    if (!match_flag) {  // no class has been matched so continue with next rule
       continue;
     }
 
@@ -285,48 +293,53 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
     VLOG("configurable_filter_engine: matching pattern");
 
-    if (msg_is_event || message_has_nn(msg)) {
+    if (msg_is_event || message_has_nn(msg->data[0])) {
 
       bool matches[2] = { false, false };                   // not matched by default
       byte action_parts_to_check = (msg_is_event ? 2 : 1);  // only check first pattern part if non-event type message
 
-      for (byte a = 0; a < action_parts_to_check; a++) {
+      for (size_t a = 0; a < action_parts_to_check; a++) {
 
         // * matches everything, so no need to check further
 
         if (strcmp(ruleset->rules[r].pattern_parts[a], "*") == 0) {
           matches[a] = true;
+          VLOG("configurable_filter_engine: all match for part %u", a);
           continue;
-        } else {
-          break;
         }
 
+        /// use decimal representations to be consistent with standard CBUS usage
+
         // if pattern part contains no metachars, compare using numeric values
+        // set short event nn to zero
 
         if (strpbrk(ruleset->rules[a].pattern_parts[a], GLOB_METACHARS) == NULL) {
 
-          uint16_t val;
+          uint16_t msgpartval;
 
           if (a == 0) {
-            val = (msg->data[1] << 8) + msg->data[2];  // the nn part
+            msgpartval = is_short_event_opcode(msg->data[0]) ? 0 : ((msg->data[1] << 8) + msg->data[2]);  // the nn part
           } else {
-            val = (msg->data[3] << 8) + msg->data[4];  // the en/dn part
+            msgpartval = (msg->data[3] << 8) + msg->data[4];  // the en/dn part
           }
 
-          if (val == atoi(ruleset->rules[r].pattern_parts[a])) {
+          if (msgpartval == atoi(ruleset->rules[r].pattern_parts[a])) {
             matches[a] = true;
+            VLOG("configurable_filter_engine: numeric match for part %u", a);
             continue;
           } else {
+            VLOG("configurable_filter_engine: numeric match fail for part %u", a);
             break;
           }
         }
 
         // convert message nn or en to string for glob pattern matching
+        // set short event nn to zero
 
         char msgpart[8];
 
         if (a == 0) {
-          snprintf(msgpart, sizeof(msgpart), "%u", (msg->data[1] << 8) + msg->data[2]);
+          snprintf(msgpart, sizeof(msgpart), "%u", is_short_event_opcode(msg->data[0]) ? 0 : ((msg->data[1] << 8) + msg->data[2]));
         } else {
           snprintf(msgpart, sizeof(msgpart), "%u", (msg->data[3] << 8) + msg->data[4]);
         }
@@ -335,15 +348,17 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
         if (fnmatch(ruleset->rules[r].pattern_parts[a], msgpart, FNMATCH_FLAGS) == 0) {
           matches[a] = true;
+          VLOG("configurable_filter_engine: glob match for part %u", a);
           continue;
         } else {
+          VLOG("configurable_filter_engine: glob match fail for part %u", a);
           break;
         }
       }
 
       match_flag = true;
 
-      for (byte a = 0; a < action_parts_to_check; a++) {
+      for (size_t a = 0; a < action_parts_to_check; a++) {
         if (!matches[a]) {
           match_flag = false;
         }
@@ -358,13 +373,13 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
     VLOG("configurable_filter_engine: pattern was matched");
 
-    /// execute the action(s)
+    /// apply the modification action(s)
 
     VLOG("configurable_filter_engine: executing action(s)");
 
     bool rule_has_event_message_class = false;
 
-    for (byte a = 0; a < NUM_ACTIONS; a++) {
+    for (size_t a = 0; a < NUM_ACTIONS; a++) {
       if (ruleset->rules[r].actions[a].active) {
 
         switch (ruleset->rules[r].actions[a].action_type) {
@@ -388,9 +403,9 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
           case ACTION_DECREMENT:
           case ACTION_EQUALS:
 
-            VLOG("configurable_filter_engine: action %u is modify and forward", a);
+            VLOG("configurable_filter_engine: action %u is modify (%u) and forward", a, ruleset->rules[r].actions[a].action_type);
 
-            for (byte k = 0; k < ruleset->rules[r].message_classes.num_classes; k++) {
+            for (size_t k = 0; k < ruleset->rules[r].message_classes.num_classes; k++) {
               if (ruleset->rules[r].message_classes.class_list[k] == MESSAGE_CLASS_EVENT
                   || ruleset->rules[r].message_classes.class_list[k] == MESSAGE_CLASS_LONG_EVENT
                   || ruleset->rules[r].message_classes.class_list[k] == MESSAGE_CLASS_SHORT_EVENT) {
@@ -416,8 +431,9 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
             VLOG("configurable_filter_engine: *** action %u is unknown", a);
             continue;
             break;
+
         }  // switch action type
-      }    // if action is active
+      }    // action is active
     }      // for each action
 
     /// copy the rule's destination interfaces
@@ -434,8 +450,10 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
 
     /// return to router with disposition value
 
-    VLOG("configurable_filter_engine: returning %u", return_value);
+    VLOG("configurable_filter_engine: returning %u, stop = %u", return_value, !context->more_rules_exist);
+
     return return_value;
+
   }  // for each rule
 
   /// if we reach here, no rule has matched the message
@@ -443,7 +461,7 @@ byte configurable_filter_engine::process_message(const byte source, struct can20
   VLOG("configurable_filter_engine: no more rules");
 
   context->more_rules_exist = false;  // no more rules
-  return return_value;
+  return return_value;                // return to router
 }
 
 ///
@@ -514,11 +532,11 @@ byte dynamic_filter_engine::process_message([[maybe_unused]] const byte source, 
   context->more_rules_exist = false;
 
   if (discoverer != nullptr) {
-    if (!(msg->id & CAN2040_ID_EFF) && is_event_opcode(msg)) {
+    if (!(msg->id & CAN2040_ID_EFF) && is_event_opcode(msg->data[0])) {
       if (discoverer->get_consumer_interfaces_for_event(msg, destination_interfaces)) {
         VLOG("dynamic_filter_engine: process_message: event message found in discoverer database");
       } else {
-        VLOG("dynamic_filter_engine: process_message: event message is not in discoverer database");
+        VLOG("dynamic_filter_engine: process_message: event message not found in discoverer database");
         return_value = RULE_RESULT_NO_MATCH;
       }
     }
@@ -575,10 +593,10 @@ bool hybrid_filter_engine::begin(void *argptr1, void *argptr2) {
 byte hybrid_filter_engine::process_message(const byte source, struct can2040_msg *msg, filter_context_t *context, interface_list_t *destination_interfaces) {
 
   bool match_flag = false;
-  byte r;
+  size_t r;
   byte return_value = RULE_RESULT_NO_MATCH;
 
-  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && !(msg->id & CAN2040_ID_RTR) && msg->dlc >= 5 && is_event_opcode(msg);
+  bool msg_is_event = !(msg->id & CAN2040_ID_EFF) && !(msg->id & CAN2040_ID_RTR) && msg->dlc >= 5 && is_event_opcode(msg->data[0]);
 
   /// check each rule in turn until a match is received (class, pattern) or none is matched
 

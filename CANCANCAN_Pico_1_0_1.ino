@@ -51,7 +51,7 @@
 
   6   - enable secondary interfaces at startup
   7   - enumerate secondary buses at startup
-  8   - pass all messages from secondary interfaces to the CBUS processor
+  8   - pass messages from secondary interfaces to the CBUS processor
   9   - filter engine type
   10  - ruleset file number for configurable and hybrid filter engines
   11  - reload ruleset files from SD card at startup
@@ -225,7 +225,6 @@ void setupCBUS(void) {
     module_config.writeNV(13, 1);   // CAN-FD or external MCP2515/8 arbitration ID, or SPE node ID
     module_config.writeNV(14, 30);  // first can bus discovery after, secs
     module_config.writeNV(15, 2);   // subsequent can bus discovery frequency, mins
-    module_config.writeNV(16, 1);   // rules file format is json
 
     module_config.writeNV(20, RULE_RESULT_DROP_MESSAGE);  // default action for interface 0 if no matching rule, when source
     module_config.writeNV(21, RULE_RESULT_DROP_MESSAGE);
@@ -411,7 +410,7 @@ void setup(void) {
   /// setup complete
 
   VLOG("setup: free memory = %u", module_config.freeSRAM());
-  VLOG("setup: sizeof rule_t = %u", sizeof(rule_t));
+  VLOG("setup: sizeof rule_t = %u, int = %u, size_t = %u", sizeof(rule_t), sizeof(int), sizeof(size_t));
   VLOG("setup: complete");
   VLOG("");
 
@@ -426,7 +425,7 @@ void setup1(void) {
 
   (void)rp2040.fifo.pop();
 
-  VLOG("setup1: begin");
+  VLOG("setup1: begins");
 
   /// configure CBUS and CAN
 
@@ -480,10 +479,6 @@ void loop1(void) {
 
   can_msg_wrapper_t wmsg;
 
-  /// process CBUS messages from the primary bus, and handle LEDs and switch
-
-  CBUS.process();
-
   /// process the output queue for the primary bus - contains messages forwarded by the router from secondary interfaces
   /// message can id will have been rewritten by the interface shim, if required by the filter engine
   /// optionally forward to the CBUS library for processing, so this device can be managed and controlled from any interface
@@ -507,6 +502,10 @@ void loop1(void) {
       CBUS.process_single_message(&cbus_msg, true);
     }
   }
+
+  /// process CBUS messages from the primary bus, and handle LEDs and switch
+
+  CBUS.process();
 }
 
 /// called by the CBUS library whenever a previously taught event is received - core 1
@@ -535,7 +534,7 @@ void eventhandler(byte index, CANFrame *msg) {
         case 100 ... 199:
           r.state = !(msg->data[0] & EVENT_ON_MASK);
           r.command_num = ev2;
-          queue_try_add(&router_command_queue, &r);
+          queue_add_blocking(&router_command_queue, &r);
           break;
 
         default:
@@ -560,9 +559,8 @@ void framehandler(CANFrame *msg) {
 
   /// forward message to router input queue for processing and forwarding to other buses
 
-  VLOG("");
   VLOG("framehandler: message = %s", format_can_message(msg));
-  queue_try_add(&bus0_input_queue, &wmsg);
+  queue_add_blocking(&bus0_input_queue, &wmsg);
 
   return;
 }
@@ -580,7 +578,7 @@ void transmithandler(CANFrame *msg) {
   /// forward message to router input queue for processing and forwarding to other buses
 
   VLOG("transmithandler: message = %s", format_can_message(msg));
-  queue_try_add(&bus0_input_queue, &wmsg);
+  queue_add_blocking(&bus0_input_queue, &wmsg);
 
   return;
 }
@@ -615,7 +613,7 @@ void send_producer_event_by_ev2(const byte ev2, const bool is_on_polarity) {
     wmsg.msg.data[0] = is_on_polarity ? OPC_ACON : OPC_ACOF;
     module_config.readEvent(index, &wmsg.msg.data[1]);
 
-    queue_try_add(&bus0_output_queue, &wmsg);
+    queue_add_blocking(&bus0_output_queue, &wmsg);
   }
 
   return;
@@ -710,7 +708,7 @@ void execute_serial_command(char *serial_command) {
       if (GCtoCAN(tokens[1], &wmsg.msg)) {
         wmsg.retries = 0;
         wmsg.timestamp = micros();
-        queue_try_add(&canbus1_input_queue, &wmsg);
+        queue_add_blocking(&rtr->internal_queue, &wmsg);
       }
 
       break;
@@ -734,21 +732,11 @@ void execute_serial_command(char *serial_command) {
 
       break;
 
-    case 'v':
-      VLOG("Node variables:");
-
-      for (byte i = 0; i < module_config.EE_NUM_NVS; i++) {
-        byte nvval = module_config.readNV(i + 1);
-        VLOG(" * %2u: %3u, 0x%02X", i + 1, nvval, nvval);
-      }
-
-      break;
-
     case 'c':
       if (num_tokens == 3) {
         r.state = atoi(tokens[1]);
         r.command_num = atoi(tokens[2]);
-        queue_try_add(&router_command_queue, &r);
+        queue_add_blocking(&router_command_queue, &r);
       } else {
         VLOG("*** invalid syntax");
       }
@@ -757,6 +745,20 @@ void execute_serial_command(char *serial_command) {
 
     case 't':
       print_date_and_time();
+      break;
+
+    case 'u':
+      CBUS.initFLiM();
+      break;
+
+    case 'v':
+      VLOG("Node variables:");
+
+      for (byte i = 0; i < module_config.EE_NUM_NVS; i++) {
+        byte nvval = module_config.readNV(i + 1);
+        VLOG(" * %2u: %3u, 0x%02X", i + 1, nvval, nvval);
+      }
+
       break;
 
     case 'w':  // push some test messages into the can1 input queue
@@ -777,7 +779,7 @@ void execute_serial_command(char *serial_command) {
             wmsg.msg.data[3] = 0;
             wmsg.msg.data[4] = 101;
 
-            queue_try_add(&canbus1_input_queue, &wmsg);
+            queue_add_blocking(&rtr->internal_queue, &wmsg);
             break;
 
           case 1:  // empty enumeration request
@@ -785,14 +787,14 @@ void execute_serial_command(char *serial_command) {
             wmsg.msg.id |= CAN2040_ID_RTR;
             wmsg.msg.dlc = 0;
 
-            queue_try_add(&canbus1_input_queue, &wmsg);
+            queue_add_blocking(&rtr->internal_queue, &wmsg);
             break;
 
           case 2:  // empty enumeration response
             wmsg.msg.id = 99 + CBUS_MEDIUM_PRIORITY_BITS;
             wmsg.msg.dlc = 0;
 
-            queue_try_add(&canbus1_input_queue, &wmsg);
+            queue_add_blocking(&rtr->internal_queue, &wmsg);
             break;
 
           case 3:  // full extended message
@@ -808,7 +810,7 @@ void execute_serial_command(char *serial_command) {
             wmsg.msg.data[6] = 6;
             wmsg.msg.data[7] = 7;
 
-            queue_try_add(&canbus1_input_queue, &wmsg);
+            queue_add_blocking(&rtr->internal_queue, &wmsg);
             break;
         }
       } else {

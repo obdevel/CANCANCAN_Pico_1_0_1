@@ -45,6 +45,8 @@
 #include "router.h"
 #include "interface.h"
 
+#include "pico/util/queue.h"
+
 /// globals defined in other files
 
 extern queue_t bus0_input_queue, bus0_output_queue;  // cbus input and output queues - created in setup() on core 0
@@ -159,6 +161,8 @@ bool message_router::begin(void) {
   interfaces[0]->ciq = &bus0_input_queue;                                                           // these queues were already created by setup() on core 0
   interfaces[0]->coq = &bus0_output_queue;
   interfaces[0]->enabled = true;
+  interfaces[0]->default_action_when_source = module_config.readNV(20);
+  interfaces[0]->default_action_when_destination = module_config.readNV(26);
 
   /// initialise secondary interfaces
 
@@ -329,6 +333,28 @@ bool message_router::begin(void) {
 
   default_interface_list.num_interfaces = MAX_INTERFACES;
 
+  // create internal message queue
+  queue_init(&internal_queue, sizeof(can_msg_wrapper_t), 8);
+
+  // send a producer message
+
+  byte index;
+  can_msg_wrapper_t wmsg;
+
+  if (find_taught_producer_event(1, &index)) {
+    VLOG("router: sending startup complete message");
+
+    wmsg.retries = 0;
+    wmsg.timestamp = micros();
+
+    wmsg.msg.id = module_config.CANID + CBUS_MEDIUM_PRIORITY_BITS;
+    wmsg.msg.dlc = 5;
+    wmsg.msg.data[0] = OPC_ACON;
+    module_config.readEvent(index, &wmsg.msg.data[1]);
+
+    queue_add_blocking(&internal_queue, &wmsg);
+  }
+
   // complete
 
   VLOG("router: initialisation complete");
@@ -356,15 +382,6 @@ void message_router::run(void) {
 
   static bool first_time = true;
   can_msg_wrapper_t wmsg;
-
-  /// process commands received from core 0 thread
-
-  router_command_t r;
-
-  if (queue_try_remove(&router_command_queue, &r)) {
-    VLOG("router: received command = %u/%u", r.state, r.command_num);
-    process_command(r);
-  }
 
   /// if router and discoverer are enabled, run a periodic bus discovery and query
 
@@ -466,6 +483,23 @@ void message_router::run(void) {
     }
   }
 
+  /// process commands received from core 0 thread
+
+  router_command_t r;
+
+  if (queue_try_remove(&router_command_queue, &r)) {
+    VLOG("router: received command = %u/%u", r.state, r.command_num);
+    process_command(r);
+  }
+
+  /// forward any internally-generated producer events
+
+  if (queue_try_remove(&internal_queue, &wmsg)) {
+    VLOG("router: forwarding producer message");
+    interface_list_t ifl = default_interface_list;
+    forward_message_to_interfaces(FROM_ROUTER, &wmsg, &ifl, true);
+  }
+
   return;
 }
 
@@ -487,9 +521,8 @@ void message_router::route_single_message(const byte source, can_msg_wrapper_t *
 
   /// set the filter engine context
 
-  context.process_all_matching_rules = true;  // in -> process all rules, not just the first match
-  context.more_rules_exist = true;            // out -> whether there are more rules to process
-  context.next_rule_to_process = 0;           // out/in -> the last rule processed - start at 0
+  context.next_rule_to_process = 0;  // in/out -> the next rule number to process - start at 0
+  context.more_rules_exist = true;   // out -> whether there are more rules to process
 
   /// pass the message to the filter engine for rules processing
 
@@ -543,6 +576,8 @@ void message_router::route_single_message(const byte source, can_msg_wrapper_t *
   }
 
   VLOG("router: route_single_message: complete");
+  VLOG("--");
+
   return;
 }
 
@@ -651,7 +686,8 @@ void message_router::process_command(const router_command_t r) {
       node_query_required = true;  // prompt node query
       break;
 
-    case 116:  // enumerate all
+    case 120:  // enumerate all
+      enumerate_all();
       break;
 
     case 130:

@@ -1,3 +1,4 @@
+#include <cstddef>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -65,15 +66,14 @@ typedef struct {  // consumer event info returned in ENRSP message
 //
 
 typedef struct {
-  bool process_all_matching_rules;  // in
-  bool more_rules_exist;            // out
-  byte next_rule_to_process;        // in / out
+  byte next_rule_to_process;  // in / out
+  bool more_rules_exist;      // out
 } filter_context_t;
 
 //
 
 typedef struct {
-  byte num_interfaces;
+  size_t num_interfaces;
   byte interface_list[MAX_INTERFACES];
   bool default_action_overrides;
 } interface_list_t;
@@ -81,7 +81,7 @@ typedef struct {
 //
 
 typedef struct {
-  byte num_classes;
+  size_t num_classes;
   byte class_list[MAX_CLASSES_PER_RULE];
 } message_class_list_t;
 
@@ -99,13 +99,13 @@ typedef struct {
   bool active;                                                 // entry is valid and active
   interface_list_t source_interfaces, destination_interfaces;  // list of interfaces to accept from and forward to, 0, 1, 2, ...
   message_class_list_t message_classes;                        // event, message, CBUS opcode, etc
+  size_t num_opcodes;                                          // the number of opcodes in the list
   byte opcodes[MAX_OPCODES_PER_RULE];                          // list of CBUS opcodes
-  byte num_opcodes;                                            // the number of opcodes in the list
   byte pattern_type;                                           // whether opcode list or event pattern
   char pattern[MAX_PATTERN_LEN];                               // pattern expression to match
   char pattern_parts[16][2];                                   // the two parts of the event pattern broken out
   char action_text[MAX_ACTION_TEXT_LEN];                       // the action text
-  byte num_actions;                                            // number of active parts, 0, 1 or 2
+  size_t num_actions;                                          // number of active parts, 0, 1 or 2
   action_t actions[2];                                         // an action for each of NN and EN/DN parts
   bool stop_on_match;                                          // whether to process further rules if this one matches
 } rule_t;
