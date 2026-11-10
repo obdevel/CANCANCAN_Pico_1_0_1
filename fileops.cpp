@@ -322,7 +322,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
     rule_has_event_message_class = false;
 
-    for (byte k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
+    for (size_t k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
       if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_EVENT
           || ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_LONG_EVENT
           || ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_SHORT_EVENT) {
@@ -334,7 +334,7 @@ byte process_rules_file_as_json(File &f, ruleset_t *ruleset) {
 
     rule_has_opcode_message_class = false;
 
-    for (byte k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
+    for (size_t k = 0; k < ruleset->rules[num_rules].message_classes.num_classes; k++) {
       if (ruleset->rules[num_rules].message_classes.class_list[k] == MESSAGE_CLASS_OPCODE) {
         rule_has_opcode_message_class = true;
         ruleset->rules[num_rules].pattern_type = PATTERN_TYPE_OPCODE_LIST;

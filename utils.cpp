@@ -69,17 +69,17 @@ int vlog(const char *fmt, ...) {
       return 0;
     }
 
+    mutex_enter_blocking(&serial_mutex);
+
     if (fmt[0] == 0) {
-      mutex_enter_blocking(&serial_mutex);
       Serial.println();
     } else {
       va_start(vptr, fmt);
       num_chars = vsnprintf(tmpbuff, VLOG_MAX_MSG_LEN, fmt, vptr);
       va_end(vptr);
-      mutex_enter_blocking(&serial_mutex);
 
-#if ENABLE_MICRO_TIMESTAMPS
-      float f = (float)(micros()) / 1000.0;
+#if ENABLE_MICRO_TIMESTAMPS == 1
+      float f = (float)(micros()) / 1000.0F;
       Serial.printf("%10.3f [%u]: ", f, get_core_num());
 #else
       Serial.printf("%10lu [%u]: ", millis(), get_core_num());
@@ -108,7 +108,7 @@ char *format_can_message(const CANFrame *msg) {
     sprintf(buffer, "[%03lu] [%u] [%s] [ ", (msg->id & 0x7f), msg->len, ((msg->len > 0 && !msg->ext) ? lookup_opcode_by_value(msg->data[0]) : ""));
   }
 
-  for (byte i = 0; i < msg->len; i++) {
+  for (size_t i = 0; i < msg->len; i++) {
     sprintf(t, "%02x ", msg->data[i]);
     strcat(buffer, t);
   }
@@ -139,7 +139,7 @@ char *format_can_message(const struct can2040_msg *msg) {
     sprintf(buffer, "[%03lu] [%lu] [%s] [ ", (msg->id & 0x7f), msg->dlc, ((msg->dlc > 0 && !(msg->id & CAN2040_ID_EFF)) ? lookup_opcode_by_value(msg->data[0]) : ""));
   }
 
-  for (byte i = 0; i < msg->dlc; i++) {
+  for (size_t i = 0; i < msg->dlc; i++) {
     sprintf(t, "%02x ", msg->data[i]);
     strcat(buffer, t);
   }
@@ -181,7 +181,7 @@ struct can2040_msg convert_cbus_to_can2040(const CANFrame *imsg) {
     omsg.id |= CAN2040_ID_EFF;
   }
 
-  for (unsigned int i = 0; i < imsg->len; i++) {
+  for (size_t i = 0; i < imsg->len; i++) {
     omsg.data[i] = imsg->data[i];
   }
 
@@ -232,7 +232,7 @@ bool is_opcode_of_message_class(const byte opcode, const byte message_class) {
 
   bool match = false;
 
-  for (byte i = 0; i < NUM_OPCODES; i++) {
+  for (size_t i = 0; i < NUM_OPCODES; i++) {
     if (opcode_lookup_table[i].opcode == opcode) {
       match = (opcode_lookup_table[i].message_class == message_class);
       break;
@@ -263,7 +263,7 @@ bool is_long_event_opcode(const byte opcode) {
 
 int lookup_opcode_by_name(const char *opcode_name) {
 
-  for (byte i = 0; i < NUM_OPCODES; i++) {
+  for (size_t i = 0; i < NUM_OPCODES; i++) {
     if (strcmp(opcode_lookup_table[i].opcode_name, opcode_name) == 0) {
       return i;
     }
@@ -276,7 +276,7 @@ int lookup_opcode_by_name(const char *opcode_name) {
 
 const char *lookup_opcode_by_value(const byte opcode) {
 
-  for (byte i = 0; i < NUM_OPCODES; i++) {
+  for (size_t i = 0; i < NUM_OPCODES; i++) {
     if (opcode_lookup_table[i].opcode == opcode) {
       return opcode_lookup_table[i].opcode_name;
     }
@@ -291,7 +291,7 @@ bool message_has_nn(const byte opcode) {
 
   bool match = false;
 
-  for (byte i = 0; i < NUM_OPCODES; i++) {
+  for (size_t i = 0; i < NUM_OPCODES; i++) {
     if (opcode_lookup_table[i].opcode == opcode) {
       match = opcode_lookup_table[i].has_nn;
       break;
@@ -443,9 +443,10 @@ char *convert_interfaces_type_to_interface_list_string(const interface_list_t *i
 
 byte convert_opcode_list_to_array(char *opcode_list, byte *arr) {
 
-  /// parse a comma-separated list of opcodes to an array of OPC_ constant values
+  /// parse a comma-separated list of opcodes to an array of OPC_ byte constant values
   /// e.g. [0x90,OPC_ACON,4,22]
   /// return number of opcodes found
+  /// brackets and spaces optional, and disregarded
 
   char *ptr;
   byte index = 0;

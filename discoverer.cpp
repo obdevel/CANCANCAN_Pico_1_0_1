@@ -76,7 +76,7 @@ void can_bus_discoverer::consume_message(const byte interface_num, const can_msg
 
         nn = (wmsg->msg.data[1] << 8) + wmsg->msg.data[2];
 
-        for (int i = 0; i < MAX_CAN_NODES && i < nodes_index; i++) {  // find existing entry for this node
+        for (size_t i = 0; i < MAX_CAN_NODES && i < nodes_index; i++) {  // find existing entry for this node
           if (can_nodes[i].node_number == nn) {
             found = true;
             break;
@@ -102,7 +102,7 @@ void can_bus_discoverer::consume_message(const byte interface_num, const can_msg
 
         nn = (wmsg->msg.data[1] << 8) + wmsg->msg.data[2];
 
-        for (int i = 0; i < MAX_CONSUMER_EVENTS && i < events_index; i++) {
+        for (size_t i = 0; i < MAX_CONSUMER_EVENTS && i < events_index; i++) {
           if (consumer_events[i].consumer_node_number == nn && consumer_events[i].b1 == wmsg->msg.data[3] && consumer_events[i].b2 == wmsg->msg.data[4] && consumer_events[i].b3 == wmsg->msg.data[5]
               && consumer_events[i].b4 == wmsg->msg.data[6]) {
             found = true;

@@ -133,7 +133,7 @@ cbus_interface::cbus_interface(const byte num, const byte interface_type, CBUSLE
 
 bool cbus_interface::begin([[maybe_unused]] const bool force_enumeration) {
 
-  VLOG("cbus_interface: begin");
+  VLOG("cbus_interface/%u: begin", num);
   enabled = true;
   return true;
 }
@@ -141,7 +141,6 @@ bool cbus_interface::begin([[maybe_unused]] const bool force_enumeration) {
 void cbus_interface::enable([[maybe_unused]] const bool new_state) {
 
   // always enabled
-
   return;
 }
 

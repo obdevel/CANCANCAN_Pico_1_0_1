@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "WiFiClass.h"
 
 /*
@@ -299,8 +300,7 @@ void network::run(void) {
 
 #if defined(IS_NETWORK_DEVICE)
 
-  byte i;
-  size_t r;
+  size_t i, r;
   can_msg_wrapper_t wmsg;
 
   static unsigned long btimer = 0;
@@ -335,7 +335,7 @@ void network::run(void) {
     switch (network_status) {
 
       case WL_CONNECTED:
-        VLOG("network/%u: network is connected", num);
+        VLOG("network/%u: network is connected, IP address = %s", num, WiFi.localIP().toString().c_str());
         network_connection_state = NETWORK_STATE_CONNECTED;
         num_current_connections = 0;
         reconnect_required = false;
@@ -413,7 +413,7 @@ void network::run(void) {
         if (num_svcs > 0) {
           VLOG("net: DNS-SD service = %s/tcp, got %u query response(s)", netcfg.servicename, num_svcs);
 
-          for (byte j = 0; j < num_svcs; j++) {
+          for (size_t j = 0; j < num_svcs; j++) {
             VLOG("  - hostname = %s, ip = %s, port = %u", MDNS.answerHostname(j), MDNS.answerIP(j).toString().c_str(), MDNS.answerPort(j));
           }
 
@@ -508,7 +508,7 @@ void network::run(void) {
 
             // process the received data chunk
 
-            for (byte j = 0; j < r; j++) {
+            for (size_t j = 0; j < r; j++) {
               char c = connection_tab[i].input_buffer[j];
 
               switch (c) {
@@ -571,7 +571,7 @@ void network::run(void) {
 
             // process the received data chunk
 
-            for (byte j = 0; j < r; j++) {
+            for (size_t j = 0; j < r; j++) {
               char c = bridge_input_buffer[j];
 
               switch (c) {
@@ -667,7 +667,7 @@ bool network::forward_message_to_net_clients(const byte source, const char *mess
 
   // send to each connected net client in turn
 
-  for (byte i = 0; i < MAX_CLIENTS; i++) {
+  for (size_t i = 0; i < MAX_CLIENTS; i++) {
     if (i != source && connection_tab[i].status == SLOT_CONNECTED && connection_tab[i].client != nullptr) {
       VLOG("network/%u: sending to client %u", num, i);
       r = connection_tab[i].client->write((uint8_t *)message, slen);
@@ -862,7 +862,7 @@ void gridconnect_serial::run(void) {
       size_t r = serial_instance->readBytes(input_buffer, sizeof(input_buffer) - 1);
       input_buffer[r] = 0;
 
-      for (byte i = 0; i < r; i++) {
+      for (size_t i = 0; i < r; i++) {
 
         char c = input_buffer[i];
 

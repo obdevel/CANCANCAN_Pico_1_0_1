@@ -74,7 +74,7 @@
   30  - ... 4
   31  - ... 5
 
-  35-46 - fixed IP addresses for ethernet interfaces (12 NVs)
+  35-46 - fixed IP addresses for ethernet interface (12 NVs) - ip, subnet, gateway
 
   EV usage;
 
@@ -325,11 +325,6 @@ void setup(void) {
   VLOG("setup: is Pico W = %u", rp2040.isPicoW());
   VLOG("setup: USB power state = %u", usb_power_detected());
 
-  /// reset network config
-
-  /// mount filesystem and list contents
-  /// mount_local_filesystem();
-
   /// create input and output queues for primary cbus interface
   /// command queue to router thread on core 1
 
@@ -410,7 +405,7 @@ void setup(void) {
   /// setup complete
 
   VLOG("setup: free memory = %u", module_config.freeSRAM());
-  VLOG("setup: sizeof rule_t = %u, int = %u, size_t = %u", sizeof(rule_t), sizeof(int), sizeof(size_t));
+  VLOG("setup: sizeof rule_t = %u, int = %u, size_t = %u, long = %u", sizeof(rule_t), sizeof(int), sizeof(size_t), sizeof(long));
   VLOG("setup: complete");
   VLOG("");
 
@@ -691,8 +686,15 @@ void execute_serial_command(char *serial_command) {
       rp2040.reboot();
       break;
 
-    case 'r':
-      module_config.resetModule();
+    case 'c':
+      if (num_tokens == 3) {
+        r.state = atoi(tokens[1]);
+        r.command_num = atoi(tokens[2]);
+        queue_add_blocking(&router_command_queue, &r);
+      } else {
+        VLOG("*** invalid syntax");
+      }
+
       break;
 
     case 'e':
@@ -732,15 +734,8 @@ void execute_serial_command(char *serial_command) {
 
       break;
 
-    case 'c':
-      if (num_tokens == 3) {
-        r.state = atoi(tokens[1]);
-        r.command_num = atoi(tokens[2]);
-        queue_add_blocking(&router_command_queue, &r);
-      } else {
-        VLOG("*** invalid syntax");
-      }
-
+    case 'r':
+      module_config.resetModule();
       break;
 
     case 't':

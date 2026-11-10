@@ -1,3 +1,4 @@
+#include <cstddef>
 
 /*
   Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
@@ -62,7 +63,7 @@ message_router::message_router() {
   VLOG("router: constructor");
   message_forwarding_enabled = false;
 
-  for (byte i = 0; i < MAX_INTERFACES; i++) {
+  for (size_t i = 0; i < MAX_INTERFACES; i++) {
     interfaces[i] = nullptr;
   }
 }
@@ -160,7 +161,7 @@ bool message_router::begin(void) {
   interfaces[0] = new cbus_interface(0, INTERFACE_TYPE_PRIMARY_CBUS, activity_leds[0], error_led);  // proxy primary cbus interface
   interfaces[0]->ciq = &bus0_input_queue;                                                           // these queues were already created by setup() on core 0
   interfaces[0]->coq = &bus0_output_queue;
-  interfaces[0]->enabled = true;
+  interfaces[0]->begin(false);
   interfaces[0]->default_action_when_source = module_config.readNV(20);
   interfaces[0]->default_action_when_destination = module_config.readNV(26);
 
@@ -174,7 +175,7 @@ bool message_router::begin(void) {
 
   num_configured_interfaces = 0;
 
-  for (byte i = 1; i < MAX_INTERFACES; i++) {
+  for (size_t i = 1; i < MAX_INTERFACES; i++) {
 
     byte interface_type = module_config.readNV(i);  // nvs 1, 2, 3, 4
     VLOG("router: creating secondary interface %u, type = %u", i, interface_type);
@@ -297,7 +298,7 @@ bool message_router::begin(void) {
 
   bool enable_secondary_interfaces_at_startup = module_config.readNV(6);
 
-  for (byte i = 1; i < MAX_INTERFACES; i++) {
+  for (size_t i = 1; i < MAX_INTERFACES; i++) {
     if (interfaces[i] != nullptr) {
 
       VLOG("router: initialising secondary interface %u, type = %u", i, interfaces[i]->interface_type);
@@ -327,7 +328,7 @@ bool message_router::begin(void) {
 
   // configure master interface list to default values ... 012345
 
-  for (byte i = 0; i < MAX_INTERFACES; i++) {  // initialise to all
+  for (size_t i = 0; i < MAX_INTERFACES; i++) {  // initialise to all
     default_interface_list.interface_list[i] = i;
   }
 
@@ -397,7 +398,7 @@ void message_router::run(void) {
       last_node_discovery_at = millis();
       node_query_required = true;
 
-      for (byte i = 0; i < MAX_INTERFACES; i++) {
+      for (size_t i = 0; i < MAX_INTERFACES; i++) {
         if (interfaces[i] != nullptr && interfaces[i]->enabled) {
           interfaces[i]->discover_nodes();
         }
@@ -414,7 +415,7 @@ void message_router::run(void) {
 
       VLOG("router: querying discovered nodes");
 
-      for (int i = 0; i < discoverer->nodes_index; i++) {
+      for (size_t i = 0; i < discoverer->nodes_index; i++) {
 
         if (interfaces[discoverer->can_nodes[i].interface_num] != nullptr && interfaces[discoverer->can_nodes[i].interface_num]->enabled) {
           VLOG("router: querying [%u] [%5u]", discoverer->can_nodes[i].interface_num, discoverer->can_nodes[i].node_number);
@@ -428,7 +429,7 @@ void message_router::run(void) {
 
   /// process input message queues from all secondary interfaces
 
-  for (byte i = 0; i < MAX_INTERFACES; i++) {
+  for (size_t i = 0; i < MAX_INTERFACES; i++) {
 
     if (interfaces[i] != nullptr) {
 
@@ -591,7 +592,7 @@ void message_router::forward_message_to_interfaces(const byte source, can_msg_wr
   VLOG("router: forwarding message from source %u to destination interfaces %s, rewrite = %u",
        source, convert_interfaces_type_to_interface_list_string(destination_interfaces, tmpb), rewrite_id);
 
-  for (byte i = 0; i < destination_interfaces->num_interfaces; i++) {  // loop over destination interfaces array, with checking
+  for (size_t i = 0; i < destination_interfaces->num_interfaces; i++) {  // loop over destination interfaces array, with checking
 
     if (destination_interfaces->interface_list[i] >= MAX_INTERFACES) {
       VLOG("router: *** invalid interface number = %u", destination_interfaces->interface_list[i]);
@@ -599,7 +600,7 @@ void message_router::forward_message_to_interfaces(const byte source, can_msg_wr
     }
 
     if (destination_interfaces->interface_list[i] == source) {  // don't forward back to the source interface
-      VLOG("router: not forwarding back to source interface %u", source);
+      VLOG("router: interface %u is the source - not forwarding", source);
       continue;
     }
 
@@ -711,7 +712,7 @@ void message_router::enumerate_all(void) {
 
   VLOG("router: enumerating all secondary buses");
 
-  for (byte i = 1; i < MAX_INTERFACES; i++) {
+  for (size_t i = 1; i < MAX_INTERFACES; i++) {
     if (interfaces[i] != nullptr && interfaces[i]->enabled) {
       interfaces[i]->enumerate_bus();
     }
